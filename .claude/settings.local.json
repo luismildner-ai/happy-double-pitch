@@ -1,0 +1,57 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm view *)",
+      "Bash(command -v npx)",
+      "Bash(git --version)",
+      "Bash(rm -rf /tmp/uipro-inspect)",
+      "Bash(git clone *)",
+      "Bash(cd /tmp/uipro-inspect && find . -maxdepth 3 -not -path '*/.git*' | sort)",
+      "Bash(brew --version)",
+      "Bash(command -v curl)",
+      "Bash(curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh)",
+      "Bash(bash)",
+      "Bash(mkdir -p /tmp/happy-double-pptx-extract)",
+      "Read(//tmp/**)",
+      "Bash(unzip -o -q \"/Users/luismildner/Desktop/HappyDouble_5Slide_Pitch_EN.pptx\" -d .)",
+      "Bash(rm -rf /tmp/happy-double-pptx-extract)",
+      "Bash(cp image1.png \"/Users/luismildner/Desktop/claude code/happy-double-pitch/public/images/box-hero-owl.png\")",
+      "Bash(cp image12.png \"/Users/luismildner/Desktop/claude code/happy-double-pitch/public/images/box-front-back.png\")",
+      "Bash(cp image5.png \"/Users/luismildner/Desktop/claude code/happy-double-pitch/public/images/scorepad.png\")",
+      "Bash(cp image8.png \"/Users/luismildner/Desktop/claude code/happy-double-pitch/public/images/logo-lockup.png\")",
+      "Bash(rm -rf /tmp/happy-double-assets)",
+      "Bash(rm -rf \"/Users/luismildner/Desktop/claude code/happy-double-pitch/.claude\" && ls -la \"/Users/luismildner/Desktop/claude code/.claude/\" && cat \"/Users/luismildner/Desktop/claude code/.claude/launch.json\" 2>&1)",
+      "Bash(zsh -ic 'command -v node && node -v')",
+      "mcp__claude-in-chrome__list_connected_browsers",
+      "mcp__claude-in-chrome__navigate",
+      "mcp__claude-in-chrome__computer",
+      "mcp__claude-in-chrome__browser_batch",
+      "mcp__claude-in-chrome__tabs_close_mcp",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5183)",
+      "Bash(curl -s -o /dev/null -w \"local 5090: %{http_code}\\\\n\" http://localhost:5090/)",
+      "Bash(curl -s -o /dev/null -w \"public tunnel: %{http_code}\\\\n\" https://directly-accomplish-mention-courage.trycloudflare.com/)",
+      "Bash(curl -s https://directly-accomplish-mention-courage.trycloudflare.com/)",
+      "Bash(/tmp/cloudflared tunnel *)",
+      "Bash(curl -s -o /dev/null -w \"public: %{http_code}\\\\n\" https://wilson-screw-quarters-sorts.trycloudflare.com/)",
+      "Bash(curl -s https://wilson-screw-quarters-sorts.trycloudflare.com/)",
+      "Bash(curl -s -o /dev/null --max-time 5 https://wilson-screw-quarters-sorts.trycloudflare.com/)",
+      "Bash(curl -s -o /dev/null -w \"public \\(normal DNS\\): %{http_code}\\\\n\" https://wilson-screw-quarters-sorts.trycloudflare.com/)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/skills/impeccable/scripts/hook.mjs\"",
+            "timeout": 5,
+            "statusMessage": "Checking UI changes"
+          }
+        ]
+      }
+    ]
+  },
+  "description": "Impeccable design detector: runs after Edit/Write/MultiEdit on UI files and surfaces findings as system reminders."
+}
