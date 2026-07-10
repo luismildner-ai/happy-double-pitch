@@ -1,6 +1,6 @@
-import { useRef, useMemo, Suspense } from 'react';
+import { useRef, useMemo, useState, useEffect, Suspense } from 'react';
 import { Canvas, useFrame, useLoader } from '@react-three/fiber';
-import { Edges, Environment } from '@react-three/drei';
+import { Physics, RigidBody, CuboidCollider } from '@react-three/rapier';
 import {
   TextureLoader,
   SRGBColorSpace,
@@ -8,6 +8,11 @@ import {
   Vector3,
   Quaternion,
   Euler,
+  Matrix4,
+  Shape,
+  ShapeGeometry,
+  ExtrudeGeometry,
+  Float32BufferAttribute,
   DodecahedronGeometry,
   CanvasTexture,
 } from 'three';
@@ -15,29 +20,30 @@ import { useScroll, useTransform, useMotionValueEvent, motion } from 'framer-mot
 import { theme } from '../content.js';
 
 /*
- * SCROLL-DRIVEN 3D — "THE BOX OPENS" (modeled on the real product photos)
+ * SCROLL-DRIVEN 3D — "THE BOX OPENS" (staged opening sequence + real physics)
  * -------------------------------------------------------------------------
- * Built from the owner's reference photos (IMG_8238–8242):
- *   - The LID holds the two D12 dice behind the owl's transparent eye-domes.
- *   - The BOX BOTTOM is a real open box with interior depth: pink insert with
- *     a card bay (deck of action cards), green ribbon, and an open felt zone.
- *   - The DICE are matte black D12s with green outlined numbers (6 and 9
- *     underlined) and the pink owl face on one side — reproduced as canvas
- *     decals on each pentagonal face.
+ * The box lies FLAT on the XZ plane (opening up, +Y) so gravity pulls the dice
+ * naturally into the tray. Camera looks down at an angle, as if on a table.
  *
- * Choreography as you scroll (progress p 0 → 1):
- *   1. p 0.00–0.22  Closed box. Dice tumble behind the eye-domes.
- *   2. p 0.22–0.48  Lid lifts off; the bottom tips flat, revealing the
- *                   interior. Camera cranes down to look inside.
- *   3. p 0.46–0.68  The card deck and the scorepad block FLY OUT of the box
- *                   and park floating beside it.
- *   4. p 0.62–0.85  The dice drop from the lid INTO the open box, bounce on
- *                   the felt, and come to rest.
- *   5. p 0.85–1.00  Settle. Final caption.
+ * Four stages, scrubbed by scroll progress p (0 → 1):
+ *   1. LID     (p 0.00–0.42)  Lid lifts straight up, glides RIGHT, and flips
+ *                             180° so its interior faces the camera.
+ *   2. CONTENTS(p 0.15–0.50)  Card deck + scorepad block lift out of the (now
+ *                             stationary) tray and glide LEFT, stacking.
+ *   3. FLAP    (p 0.45–0.60)  The inner "OPEN EYES!" flap pivots open, revealing
+ *                             the two D12 dice in their eye compartments.
+ *   4. ROLL    (p ≥ 0.62)     The dice release from the eye sockets; at that
+ *                             instant they hand off to the Rapier physics engine
+ *                             and fall into the felt DICE-ZONE, bouncing off the
+ *                             tray walls and settling naturally.
  *
- * All geometry is procedural; textures are the rectified box front, the real
- * card back, and the real scorepad. Scrubbing is damped (ProgressSmoother)
- * for the Apple-style glide.
+ * Physics note: while p < RELEASE the dice are KINEMATIC bodies driven to the
+ * lid's eye-cups every frame; crossing RELEASE flips them to DYNAMIC with a
+ * launch velocity. Scrolling back re-arms them. The tray is a stationary set of
+ * fixed colliders matching the visible walls/floor.
+ *
+ * Almost everything is a tunable constant below — I could not watch this render,
+ * so timings/positions are meant to be nudged by eye.
  */
 
 const FRONT_TEXTURE = '/images/box-front-flat.png';
@@ -45,68 +51,93 @@ const CARD_TEXTURE = '/images/card-back.png';
 const PAD_TEXTURE = '/images/scorepad.png';
 const PINK = theme.colors.neonPink;
 const GREEN = theme.colors.neonGreen;
-const INSERT_PINK = '#d81b7f'; // the interior insert's magenta (ref photo 8239)
-const FELT_GREEN = '#7aa321'; // the tray felt (ref photo 8240)
+const INSERT_PINK = '#d81b7f';
+const FELT_GREEN = '#8ec21a';
 
 const prefersReducedMotion =
   typeof window !== 'undefined' &&
   window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
-// Box dimensions (world units). Portrait game box, split into lid + bottom.
+/* ---------------------------------------------------------------- layout --- */
+// Flat box. Footprint W(x) × H(z); walls rise +Y. Felt floor top at y = 0.
 const W = 2.6;
 const H = 3.6;
-const LID_D = 0.45;
-const TRAY_D = 0.5;
 const WALL = 0.07;
+const WALL_H = 0.5; // inner wall height
+const LID_D = 0.42; // lid thickness
+const FLOOR_T = 0.06; // floor slab thickness
 
-// Eye-dome anchors — verified visually with circle overlays on the artwork
-// (see scratchpad markers2.mjs): these sit dead-center on the eye windows.
-// Slightly asymmetric because the rectified art itself leans a touch.
-// Verified via pixel composite (scratchpad composite.mjs → /tmp/composite3):
-// discs seat perfectly in the printed rings at these coordinates.
-const EYE_L = { x: -0.452, y: 0.655, z: LID_D / 2 + 0.02 };
-const EYE_R = { x: 0.572, y: 0.638, z: LID_D / 2 + 0.02 };
-const DOME_R = 0.43;
+const INNER_W = W - WALL * 2;
+const INNER_H = H - WALL * 2;
+const FIT = 0.03;
+const PAD_THICK = 0.08;
+const CARD_THICK = 0.2;
+const PAD_SIZE = [INNER_W - FIT * 2, INNER_H - FIT * 2, PAD_THICK];
+const CARD_DEPTH = INNER_H * 0.44;
+const CARD_SIZE = [INNER_W - FIT * 2, CARD_DEPTH, CARD_THICK];
+const CARD_Z = INNER_H * 0.22; // deck offset into the +Z half of the tray
+
 const DIE_R = 0.24;
-// In-eye visuals are IMPOSTORS: discs cut straight out of the hero render
-// (the painted dice showing 10 and 7 through the glass), so the eyes look
-// exactly like the first box. The 3D dice only appear when they launch.
-const EYE_IMPOSTOR_L = '/images/eye-die-left.png';
-const EYE_IMPOSTOR_R = '/images/eye-die-right.png';
 
-// Open-state targets.
-const LID_OPEN = { x: 0, y: 1.75, z: 0.35, rotX: -0.55 };
-const TRAY_OPEN = { x: 0, y: -1.5, z: 0.75, rotX: -1.45 }; // lying flat, opening up
+// Lid keyframes (closed → lifted → right → flipped, then settle).
+const LID_CLOSED_Y = WALL_H + LID_D / 2 + 0.02;
+const LID_REST = { x: 2.9, y: 0.7, z: 0 };
 
-// Dice land INSIDE the box, resting on the felt (y tuned to the smaller die).
-const LAND_L = { x: -0.45, y: -1.42, z: 1.08 };
-const LAND_R = { x: 0.5, y: -1.43, z: 0.95 };
+// Content park spots (left, stacked, lying flat). rot -90°X = artwork faces UP
+// toward the overhead camera (was +90°, which pointed the art down → blank).
+const PAD_PARK = { pos: [-2.9, 0.32, 0], rot: [-Math.PI / 2, 0, 0] };
+const CARD_PARK = { pos: [-2.9, 0.58, 0], rot: [-Math.PI / 2, 0, 0] };
 
-// Where the contents park after flying out.
-const CARD_PARK = { pos: [-2.35, 0.15, 1.3], rot: [-0.2, 0.3, 0.05] };
-const PAD_PARK = { pos: [2.35, -0.1, 1.2], rot: [-0.25, -0.3, -0.05] };
+// The two dice live in eye-cups on the lid interior (lid-local coordinates).
+const EYE_SOCKET_Z = -0.5; // toward the far/top end of the interior
+const EYE_CUP_L = new Vector3(-0.52, -(LID_D / 2 + DIE_R * 0.45), EYE_SOCKET_Z);
+const EYE_CUP_R = new Vector3(0.52, -(LID_D / 2 + DIE_R * 0.45), EYE_SOCKET_Z);
 
-// Phase timing. Cards leave first (they sit on top of the scorepad block),
-// then the block, then the dice drop into the emptied box.
-const OPEN_START = 0.22, OPEN_END = 0.48;
-const CARD_OUT = [0.44, 0.6];
-const PAD_OUT = [0.5, 0.68];
-const DROP_START = 0.66, DROP_END = 0.88;
+// OPEN EYES flap: hinged at its TOP edge (+Z) so it swings UP to reveal the eye
+// sockets below it. Tunables.
+const FLAP_Y = -LID_D / 2 - 0.014; // just under the interior surface
+const FLAP_HINGE_Z = 0.25; // hinge line (top edge of the flap)
+const FLAP_LEN = 1.55; // extends toward -Z, covering both eye sockets
+
+// Stage timings.
+const RELEASE = 0.62; // dice hand off to physics here
+const CONTENT_OUT = [0.15, 0.5];
+const FLAP_KEYS = [[0, 0], [0.45, 0], [0.6, 2.0]]; // flap open angle (rad)
+
+// Dice launch: high apex clears the (invisible) rim fence; targets sit inside
+// the felt so both dice land in the DICE-ZONE.
+const LAUNCH_VY = 5.6;
+const DIE_TARGET_L = [-0.35, 0.18, 0.28];
+const DIE_TARGET_R = [0.4, 0.18, -0.26];
+// Invisible physics fence: much taller than the visible walls so a die can never
+// bounce out of the tray once it has dropped in.
+const FENCE_H = 1.8;
 
 const phase = (p, a, b) => MathUtils.clamp((p - a) / (b - a), 0, 1);
 const easeOut = (t) => 1 - Math.pow(1 - t, 3);
 const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
-/* ---------------------------------------------------------------- dice --- */
+// Piecewise keyframe interpolation for a scalar over scroll progress.
+function track(p, keys, ease = easeInOut) {
+  if (p <= keys[0][0]) return keys[0][1];
+  for (let i = 1; i < keys.length; i++) {
+    if (p <= keys[i][0]) {
+      const [pa, va] = keys[i - 1];
+      const [pb, vb] = keys[i];
+      return va + (vb - va) * ease((p - pa) / (pb - pa));
+    }
+  }
+  return keys[keys.length - 1][1];
+}
 
-// Canvas decal for one die face: bold green number with dark outline (6 and 9
-// underlined, like the real die) — or the pink owl face on the "1" side.
+/* ------------------------------------------------------------- textures --- */
+
+// Canvas decal for one die face: bold green number (6/9 underlined) or the owl.
 function makeFaceTexture(label) {
   const c = document.createElement('canvas');
   c.width = c.height = 128;
   const ctx = c.getContext('2d');
   if (label === 'owl') {
-    // simplified owl mark: pink head, green eye rings, black pupils, beak
     ctx.fillStyle = '#e5148c';
     ctx.beginPath();
     ctx.arc(64, 68, 34, 0, Math.PI * 2);
@@ -123,21 +154,16 @@ function makeFaceTexture(label) {
     ctx.beginPath(); ctx.arc(84, 58, 4, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#F5A623';
     ctx.beginPath(); ctx.moveTo(64, 74); ctx.lineTo(56, 88); ctx.lineTo(72, 88); ctx.closePath(); ctx.fill();
-    // ear tufts
     ctx.fillStyle = '#e5148c';
     ctx.beginPath(); ctx.moveTo(36, 44); ctx.lineTo(28, 22); ctx.lineTo(50, 34); ctx.closePath(); ctx.fill();
     ctx.beginPath(); ctx.moveTo(92, 44); ctx.lineTo(100, 22); ctx.lineTo(78, 34); ctx.closePath(); ctx.fill();
   } else {
-    // pure green fill, large — matches the reference video of the real die
     ctx.font = '900 78px Arial, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#A6E22E';
     ctx.fillText(label, 64, 58);
-    if (label === '6' || label === '9') {
-      // underline so orientation is unambiguous — the real die does this
-      ctx.fillRect(42, 104, 44, 9);
-    }
+    if (label === '6' || label === '9') ctx.fillRect(42, 104, 44, 9);
   }
   const t = new CanvasTexture(c);
   t.colorSpace = SRGBColorSpace;
@@ -145,9 +171,6 @@ function makeFaceTexture(label) {
   return t;
 }
 
-// Printed side panel for the box (spine / edges): near-black card stock with
-// the green frame line, optional vertical "HAPPY DOUBLE" spine text — matches
-// the real box's sides so the 3D box reads like the hero render, not CG.
 function makePanelTexture(wPx, hPx, { label = '' } = {}) {
   const c = document.createElement('canvas');
   c.width = wPx;
@@ -155,12 +178,10 @@ function makePanelTexture(wPx, hPx, { label = '' } = {}) {
   const ctx = c.getContext('2d');
   ctx.fillStyle = '#0c0c0c';
   ctx.fillRect(0, 0, wPx, hPx);
-  // subtle print-noise so the surface isn't a dead flat color
   for (let i = 0; i < (wPx * hPx) / 900; i++) {
     ctx.fillStyle = `rgba(255,255,255,${Math.random() * 0.02})`;
     ctx.fillRect(Math.random() * wPx, Math.random() * hPx, 2, 2);
   }
-  // green frame line, inset like the real box edges
   const inset = Math.min(wPx, hPx) * 0.16;
   const rad = Math.min(wPx, hPx) * 0.12;
   ctx.strokeStyle = '#9ccb2b';
@@ -169,7 +190,6 @@ function makePanelTexture(wPx, hPx, { label = '' } = {}) {
   ctx.roundRect(inset, inset, wPx - inset * 2, hPx - inset * 2, rad);
   ctx.stroke();
   if (label) {
-    // vertical spine text, reading bottom-to-top like the real spine
     ctx.save();
     ctx.translate(wPx / 2, hPx / 2);
     ctx.rotate(-Math.PI / 2);
@@ -187,187 +207,421 @@ function makePanelTexture(wPx, hPx, { label = '' } = {}) {
   return t;
 }
 
-// White pill label with pink text — the "WÜRFEL-ZONE" marking printed on the
-// real tray (reference video IMG_8244).
-function makeZoneLabel() {
+function makeFeltTexture() {
   const c = document.createElement('canvas');
-  c.width = 512;
-  c.height = 96;
+  c.width = c.height = 512;
   const ctx = c.getContext('2d');
-  ctx.fillStyle = '#f7f7f7';
-  ctx.beginPath();
-  ctx.roundRect(8, 8, 496, 80, 40);
-  ctx.fill();
-  ctx.font = '900 44px Arial, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#e5148c';
-  ctx.letterSpacing = '4px';
-  ctx.fillText('WÜRFEL-ZONE', 256, 50);
+  ctx.fillStyle = FELT_GREEN;
+  ctx.fillRect(0, 0, 512, 512);
+  const img = ctx.getImageData(0, 0, 512, 512);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const n = (Math.random() - 0.5) * 26;
+    d[i] = Math.max(0, Math.min(255, d[i] + n));
+    d[i + 1] = Math.max(0, Math.min(255, d[i + 1] + n));
+    d[i + 2] = Math.max(0, Math.min(255, d[i + 2] + n * 0.6));
+  }
+  ctx.putImageData(img, 0, 0);
   const t = new CanvasTexture(c);
   t.colorSpace = SRGBColorSpace;
+  t.anisotropy = 4;
   return t;
 }
 
-// Pentagon face centers + orientations of a dodecahedron, for decal placement.
+// "DICE-ZONE" badge (white pill, dark text, pink arrow) for the inner walls.
+const WALL_LABEL_ASPECT = 640 / 200;
+function makeWallLabel() {
+  const cw = 640, ch = 200;
+  const c = document.createElement('canvas');
+  c.width = cw;
+  c.height = ch;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, cw, ch);
+  ctx.fillStyle = '#f6f6f6';
+  ctx.beginPath();
+  ctx.roundRect(12, 46, cw - 24, ch - 92, (ch - 92) / 2);
+  ctx.fill();
+  ctx.font = `900 ${Math.floor(ch * 0.34)}px Arial, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.letterSpacing = '2px';
+  ctx.fillStyle = '#141414';
+  ctx.fillText('DICE-ZONE', cw / 2 - 18, ch / 2);
+  ctx.fillStyle = '#e5148c';
+  const ax = cw - 70;
+  ctx.beginPath();
+  ctx.moveTo(ax, ch * 0.4);
+  ctx.lineTo(ax + 28, ch * 0.5);
+  ctx.lineTo(ax, ch * 0.6);
+  ctx.closePath();
+  ctx.fill();
+  const t = new CanvasTexture(c);
+  t.colorSpace = SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+
+// "OPEN EYES!" inner flap graphic — pink feather ground, white speech pill.
+function makeFlapTexture() {
+  const cw = 1024, ch = 720;
+  const c = document.createElement('canvas');
+  c.width = cw;
+  c.height = ch;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = INSERT_PINK;
+  ctx.fillRect(0, 0, cw, ch);
+  // subtle feather speckle
+  ctx.fillStyle = 'rgba(0,0,0,0.10)';
+  for (let i = 0; i < 240; i++) {
+    const x = Math.random() * cw, y = Math.random() * ch, r = 6 + Math.random() * 8;
+    ctx.beginPath();
+    ctx.ellipse(x, y, r, r * 0.4, Math.random() * Math.PI, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // white pill with the callout
+  ctx.fillStyle = '#f7f7f7';
+  ctx.beginPath();
+  ctx.roundRect(cw * 0.16, ch * 0.36, cw * 0.68, ch * 0.28, 90);
+  ctx.fill();
+  ctx.fillStyle = '#141414';
+  ctx.font = '900 120px Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('OPEN EYES!', cw / 2, ch * 0.5);
+  const t = new CanvasTexture(c);
+  t.colorSpace = SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+
+// A single dark feather/leaf silhouette (the tray's scattered pattern).
+function drawFeather(ctx, x, y, s, rot, color) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(rot);
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(0, -s);
+  ctx.quadraticCurveTo(s * 0.55, -s * 0.15, 0, s);
+  ctx.quadraticCurveTo(-s * 0.55, -s * 0.15, 0, -s);
+  ctx.fill();
+  ctx.restore();
+}
+
+// Pink feather ground for the tray outer/inner walls (matches the physical box).
+function makeFeatherPink(w = 1024, h = 1024, seedCount = 46) {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = INSERT_PINK;
+  ctx.fillRect(0, 0, w, h);
+  for (let i = 0; i < seedCount; i++) {
+    drawFeather(ctx, Math.random() * w, Math.random() * h, 16 + Math.random() * 26, Math.random() * Math.PI, 'rgba(20,0,12,0.22)');
+  }
+  const t = new CanvasTexture(c);
+  t.colorSpace = SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+
+// "WARNING! DOUBLE TROUBLE!" white badge (transparent ground → overlays the
+// feather wall). ACHTUNG!→WARNING! (pink), PASCHGEFAHR!→DOUBLE TROUBLE! (dark).
+function makeWarningDecal() {
+  const cw = 1100, ch = 220;
+  const c = document.createElement('canvas');
+  c.width = cw;
+  c.height = ch;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, cw, ch);
+  ctx.fillStyle = '#f6f6f6';
+  ctx.beginPath();
+  ctx.roundRect(20, 46, cw - 40, ch - 92, (ch - 92) / 2);
+  ctx.fill();
+  ctx.textBaseline = 'middle';
+  ctx.font = `900 ${Math.floor(ch * 0.34)}px Arial, sans-serif`;
+  const a = 'WARNING! ';
+  const b = 'DOUBLE TROUBLE!';
+  const wa = ctx.measureText(a).width;
+  const wb = ctx.measureText(b).width;
+  const startX = (cw - (wa + wb)) / 2;
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#e5148c';
+  ctx.fillText(a, startX, ch / 2 + 2);
+  ctx.fillStyle = '#141414';
+  ctx.fillText(b, startX + wa, ch / 2 + 2);
+  const t = new CanvasTexture(c);
+  t.colorSpace = SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+
+// "HAPPY DOUBLE" large white title for the outer side walls (transparent).
+function makeTitleDecal() {
+  const cw = 1536, ch = 320;
+  const c = document.createElement('canvas');
+  c.width = cw;
+  c.height = ch;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, cw, ch);
+  ctx.font = `900 ${Math.floor(ch * 0.62)}px Arial, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.letterSpacing = '4px';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = ch * 0.06;
+  ctx.strokeStyle = 'rgba(10,0,6,0.55)';
+  ctx.strokeText('HAPPY DOUBLE', cw / 2, ch / 2);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText('HAPPY DOUBLE', cw / 2, ch / 2);
+  const t = new CanvasTexture(c);
+  t.colorSpace = SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+
+// Lid bottom-edge info panel (transparent ground over the black lid edge):
+// left = HAPPY DOUBLE / NO RISK, NO RUN!  ·  right = 8–99 · 20 Min. · 2+ Players.
+function makeLidInfoDecal() {
+  const cw = 1600, ch = 240;
+  const c = document.createElement('canvas');
+  c.width = cw;
+  c.height = ch;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, cw, ch);
+  ctx.fillStyle = '#ffffff';
+  // left block
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.font = `900 ${Math.floor(ch * 0.34)}px Arial, sans-serif`;
+  ctx.fillText('HAPPY DOUBLE', 40, ch * 0.4);
+  ctx.font = `700 ${Math.floor(ch * 0.2)}px Arial, sans-serif`;
+  ctx.fillText('NO RISK, NO RUN!', 40, ch * 0.72);
+  // right block: three specs with minimal icons
+  const specs = [
+    { icon: 'age', label: '8–99' },
+    { icon: 'time', label: '20 Min.' },
+    { icon: 'players', label: '2+ Players' },
+  ];
+  const rx0 = cw * 0.52;
+  const colW = (cw - rx0 - 40) / specs.length;
+  ctx.font = `800 ${Math.floor(ch * 0.24)}px Arial, sans-serif`;
+  ctx.textAlign = 'center';
+  specs.forEach((s, i) => {
+    const cx = rx0 + colW * i + colW / 2;
+    ctx.strokeStyle = '#ffffff';
+    ctx.fillStyle = '#ffffff';
+    ctx.lineWidth = ch * 0.03;
+    const iy = ch * 0.34, r = ch * 0.14;
+    if (s.icon === 'age') {
+      ctx.beginPath(); ctx.arc(cx, iy, r, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx, iy, r * 0.28, 0, Math.PI * 2); ctx.fill();
+    } else if (s.icon === 'time') {
+      ctx.beginPath(); ctx.arc(cx, iy, r, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx, iy); ctx.lineTo(cx, iy - r * 0.6); ctx.moveTo(cx, iy); ctx.lineTo(cx + r * 0.5, iy); ctx.stroke();
+    } else {
+      ctx.beginPath(); ctx.arc(cx - r * 0.45, iy - r * 0.2, r * 0.42, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx + r * 0.45, iy - r * 0.2, r * 0.42, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.roundRect(cx - r * 0.95, iy + r * 0.2, r * 1.9, r * 0.75, r * 0.3); ctx.fill();
+    }
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(s.label, cx, ch * 0.76);
+  });
+  const t = new CanvasTexture(c);
+  t.colorSpace = SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+
+const mkQuat = (xA, yA, zA) => new Quaternion().setFromRotationMatrix(new Matrix4().makeBasis(xA, yA, zA));
+// Inner-wall label orientations for the FLAT tray (walls rise +Y, up = +Y).
+const WALL_QUAT_PX = mkQuat(new Vector3(0, 0, 1), new Vector3(0, 1, 0), new Vector3(-1, 0, 0)); // +X wall, faces -X
+const WALL_QUAT_NX = mkQuat(new Vector3(0, 0, -1), new Vector3(0, 1, 0), new Vector3(1, 0, 0)); // -X wall, faces +X
+const WALL_QUAT_PZ = mkQuat(new Vector3(-1, 0, 0), new Vector3(0, 1, 0), new Vector3(0, 0, -1)); // +Z wall, faces -Z
+const WALL_QUAT_NZ = mkQuat(new Vector3(1, 0, 0), new Vector3(0, 1, 0), new Vector3(0, 0, 1)); // -Z wall, faces +Z
+
+// Dodecahedron faces → { position, quaternion } for placing number decals.
 function computeD12Faces(radius) {
   const geo = new DodecahedronGeometry(radius);
   const pos = geo.getAttribute('position');
-  const norm = geo.getAttribute('normal');
-  const groups = new Map();
-  for (let i = 0; i < pos.count; i++) {
-    const key = `${norm.getX(i).toFixed(2)},${norm.getY(i).toFixed(2)},${norm.getZ(i).toFixed(2)}`;
-    if (!groups.has(key)) groups.set(key, { n: new Vector3(norm.getX(i), norm.getY(i), norm.getZ(i)).normalize(), verts: new Map() });
-    const g = groups.get(key);
-    const vk = `${pos.getX(i).toFixed(3)},${pos.getY(i).toFixed(3)},${pos.getZ(i).toFixed(3)}`;
-    if (!g.verts.has(vk)) g.verts.set(vk, new Vector3(pos.getX(i), pos.getY(i), pos.getZ(i)));
+  const groups = [];
+  const a = new Vector3(), b = new Vector3(), c = new Vector3();
+  const e1 = new Vector3(), e2 = new Vector3(), n = new Vector3();
+  for (let i = 0; i < pos.count; i += 3) {
+    a.fromBufferAttribute(pos, i);
+    b.fromBufferAttribute(pos, i + 1);
+    c.fromBufferAttribute(pos, i + 2);
+    n.crossVectors(e1.subVectors(b, a), e2.subVectors(c, a)).normalize();
+    let g = groups.find((f) => f.n.dot(n) > 0.99);
+    if (!g) {
+      g = { n: n.clone(), verts: new Map() };
+      groups.push(g);
+    }
+    for (const v of [a, b, c]) {
+      const vk = `${v.x.toFixed(3)},${v.y.toFixed(3)},${v.z.toFixed(3)}`;
+      if (!g.verts.has(vk)) g.verts.set(vk, v.clone());
+    }
   }
   geo.dispose();
-  return [...groups.values()].map((g) => {
-    const c = new Vector3();
-    g.verts.forEach((v) => c.add(v));
-    c.divideScalar(g.verts.size);
+  const up = new Vector3(0, 1, 0);
+  const altUp = new Vector3(0, 0, 1);
+  return groups.map((g) => {
+    const center = new Vector3();
+    g.verts.forEach((v) => center.add(v));
+    center.divideScalar(g.verts.size);
+    const z = g.n.clone();
+    const yRef = Math.abs(z.dot(up)) > 0.9 ? altUp : up;
+    const x = new Vector3().crossVectors(yRef, z).normalize();
+    const y = new Vector3().crossVectors(z, x).normalize();
     return {
-      position: c.add(g.n.clone().multiplyScalar(0.004)),
-      quaternion: new Quaternion().setFromUnitVectors(new Vector3(0, 0, 1), g.n),
+      position: center.add(z.clone().multiplyScalar(0.02)),
+      quaternion: new Quaternion().setFromRotationMatrix(new Matrix4().makeBasis(x, y, z)),
     };
   });
 }
 
 const FACE_LABELS = ['owl', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
+let FACE_TEXTURES = null;
+const getFaceTextures = () => (FACE_TEXTURES ||= FACE_LABELS.map(makeFaceTexture));
 
-/* Damped scrub — the "Apple feel". */
-function ProgressSmoother({ targetRef, smoothRef }) {
-  useFrame((_, delta) => {
-    const k = 1 - Math.exp(-delta * 5.5);
-    smoothRef.current += (targetRef.current - smoothRef.current) * k;
-  });
-  return null;
+function roundedRectShape(w, h, r) {
+  const s = new Shape();
+  const x = -w / 2, y = -h / 2;
+  r = Math.min(r, w / 2, h / 2);
+  s.moveTo(x + r, y);
+  s.lineTo(x + w - r, y);
+  s.quadraticCurveTo(x + w, y, x + w, y + r);
+  s.lineTo(x + w, y + h - r);
+  s.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  s.lineTo(x + r, y + h);
+  s.quadraticCurveTo(x, y + h, x, y + h - r);
+  s.lineTo(x, y + r);
+  s.quadraticCurveTo(x, y, x + r, y);
+  return s;
+}
+function roundedPlaneGeometry(w, h, r) {
+  const geo = new ShapeGeometry(roundedRectShape(w, h, r), 6);
+  const pos = geo.attributes.position;
+  const uv = [];
+  for (let i = 0; i < pos.count; i++) uv.push((pos.getX(i) + w / 2) / w, (pos.getY(i) + h / 2) / h);
+  geo.setAttribute('uv', new Float32BufferAttribute(uv, 2));
+  return geo;
+}
+function roundedCardGeometry(w, h, d, r) {
+  const geo = new ExtrudeGeometry(roundedRectShape(w, h, r), { depth: d, bevelEnabled: false, curveSegments: 6 });
+  geo.translate(0, 0, -d / 2);
+  return geo;
 }
 
-/* Camera dolly: cranes up + in and tips down to look into the open box. */
-function CameraRig({ progress }) {
-  useFrame((state) => {
-    const t = easeInOut(phase(progress.current, OPEN_START, 0.8));
-    state.camera.position.set(0, MathUtils.lerp(0, 2.3, t), MathUtils.lerp(7.5, 6.3, t));
-    state.camera.lookAt(0, MathUtils.lerp(0, -0.6, t), 0);
-  });
-  return null;
-}
+/* --------------------------------------------------------------- pieces --- */
 
-/* A D12 with numbered faces that rests in the eye-dome (number facing out,
- * like the printed box), then drops INTO the box when the lid comes off. */
-function Die({ anchorRef, landing, progress, seed, restLabel = '10' }) {
-  const ref = useRef();
-  const releasePos = useRef(null);
-  const v = useMemo(() => new Vector3(), []);
+// Shared D12 visual (matte body + numbered decals).
+function DieMesh() {
   const faces = useMemo(() => computeD12Faces(DIE_R), []);
-  const textures = useMemo(() => FACE_LABELS.map(makeFaceTexture), []);
-  // Rest orientation: rotate the die so the `restLabel` face points at the
-  // camera — the real box shows a readable number in each eye (10 and 7).
-  const restQuat = useMemo(() => {
-    const idx = Math.max(0, FACE_LABELS.indexOf(restLabel));
-    return faces[idx].quaternion.clone().invert();
-  }, [faces, restLabel]);
-
-  useFrame((state, delta) => {
-    const die = ref.current;
-    if (!die || !anchorRef.current) return;
-    const p = progress.current;
-    const tDrop = phase(p, DROP_START, DROP_END);
-
-    if (tDrop <= 0) {
-      // While resting in the eye, the painted impostor disc IS the die —
-      // keep the 3D die hidden, parked at the anchor, number facing out, so
-      // the swap at launch is seamless.
-      die.visible = false;
-      anchorRef.current.getWorldPosition(v);
-      die.position.copy(v);
-      die.quaternion.copy(restQuat);
-      releasePos.current = null;
-    } else {
-      die.visible = true;
-      if (!releasePos.current) {
-        anchorRef.current.getWorldPosition(v);
-        releasePos.current = v.clone();
-      }
-      const s = releasePos.current;
-      die.position.x = MathUtils.lerp(s.x, landing.x, easeOut(tDrop));
-      die.position.z = MathUtils.lerp(s.z, landing.z, easeOut(tDrop));
-      let y = MathUtils.lerp(s.y, landing.y, tDrop * tDrop); // gravity-ish fall
-      if (tDrop > 0.72) {
-        const b = (tDrop - 0.72) / 0.28; // damped bounce on the felt
-        y += Math.abs(Math.sin(b * Math.PI * 2)) * (1 - b) * 0.14;
-      }
-      die.position.y = y;
-      const settle = 1 - phase(p, 0.86, 0.97);
-      die.rotation.x += delta * (6 * (1 - tDrop) + 0.2) * seed.a * settle;
-      die.rotation.y += delta * (5 * (1 - tDrop) + 0.15) * seed.b * settle;
-      die.scale.setScalar(MathUtils.lerp(1, 1.25, easeOut(tDrop)));
-    }
-  });
-
+  const textures = useMemo(getFaceTextures, []);
   return (
-    <group ref={ref}>
-      {/* matte black body — like the real die: soft sheen, faint facet edges */}
-      <mesh>
+    <group>
+      <mesh castShadow>
         <dodecahedronGeometry args={[DIE_R]} />
-        <meshStandardMaterial color="#131313" roughness={0.38} metalness={0.15} envMapIntensity={0.9} />
-        <Edges threshold={12} color="#2a2a2a" scale={1.001} />
+        <meshStandardMaterial color="#0b0b0b" roughness={0.52} metalness={0} flatShading />
       </mesh>
-      {/* per-face number decals */}
-      {faces.map((f, i) => (
+      {faces.slice(0, textures.length).map((f, i) => (
         <mesh key={i} position={f.position} quaternion={f.quaternion}>
-          <planeGeometry args={[DIE_R * 0.74, DIE_R * 0.74]} />
-          <meshBasicMaterial map={textures[i]} transparent toneMapped={false} polygonOffset polygonOffsetFactor={-2} />
+          <planeGeometry args={[DIE_R * 0.62, DIE_R * 0.62]} />
+          <meshBasicMaterial map={textures[i]} transparent toneMapped={false} depthWrite={false} polygonOffset polygonOffsetFactor={-4} />
         </mesh>
       ))}
     </group>
   );
 }
 
-/* In-eye die impostor: the exact painted dome disc from the hero render
- * (glass sheen + die + number baked in). Unlit material so the artwork's own
- * lighting is preserved 1:1. Fades out the instant the 3D die launches. */
-function EyeDieImpostor({ eye, url, progress }) {
-  const matRef = useRef();
-  const map = useLoader(TextureLoader, url);
-  map.colorSpace = SRGBColorSpace;
+/* Physics D12. While p < RELEASE it is KINEMATIC, driven each frame to its
+ * eye-cup in the (moving/flipping) lid. Crossing RELEASE flips it to DYNAMIC
+ * with a launch velocity toward the tray, and Rapier takes over. */
+function PhysicsDie({ apiRef, lidRef, cupLocal, progress, target }) {
+  const launched = useRef(false);
+  const cup = useMemo(() => cupLocal.clone(), [cupLocal]);
+  const wp = useMemo(() => new Vector3(), []);
+  const wq = useMemo(() => new Quaternion(), []);
+
   useFrame(() => {
-    const fade = 1 - phase(progress.current, DROP_START, DROP_START + 0.05);
-    if (matRef.current) matRef.current.opacity = fade;
+    const api = apiRef.current;
+    const lid = lidRef.current;
+    if (!api || !lid) return;
+    const p = progress.current;
+
+    if (p < RELEASE) {
+      if (launched.current) {
+        api.setBodyType(2, true); // 2 = KinematicPositionBased → re-arm on scroll-back
+        launched.current = false;
+      }
+      lid.updateWorldMatrix(true, false);
+      wp.copy(cup).applyMatrix4(lid.matrixWorld);
+      lid.getWorldQuaternion(wq);
+      api.setNextKinematicTranslation(wp);
+      api.setNextKinematicRotation(wq);
+    } else if (!launched.current) {
+      launched.current = true;
+      lid.updateWorldMatrix(true, false);
+      wp.copy(cup).applyMatrix4(lid.matrixWorld);
+      api.setBodyType(0, true); // 0 = Dynamic
+      api.setTranslation(wp, true);
+      // BALLISTIC launch: a fixed high apex (clears the rim fence) with the
+      // horizontal velocity solved so the die lands ON its target inside the
+      // felt. This guarantees both dice arc over the wall and drop into the
+      // DICE-ZONE rather than sailing off the side.
+      const g = 9.81;
+      const vy = LAUNCH_VY; // upward — sets the arc height
+      const disc = Math.max(vy * vy - 2 * g * (wp.y - target[1]), 0.04);
+      const t = (vy + Math.sqrt(disc)) / g; // time to descend to target height
+      api.setLinvel({ x: (target[0] - wp.x) / t, y: vy, z: (target[2] - wp.z) / t }, true);
+      api.setAngvel({ x: (Math.random() - 0.5) * 9, y: (Math.random() - 0.5) * 9, z: (Math.random() - 0.5) * 9 }, true);
+    }
+    // once dynamic, Rapier owns it — nothing to do
   });
+
   return (
-    <mesh position={[eye.x, eye.y, eye.z + 0.005]}>
-      {/* 1.06 = disc slightly overlaps the printed ring's inner edge, hiding
-          any seam — the factor verified in the pixel composite */}
-      <circleGeometry args={[DOME_R * 1.06, 48]} />
-      <meshBasicMaterial ref={matRef} map={map} transparent toneMapped={false} />
-    </mesh>
+    <RigidBody
+      ref={apiRef}
+      colliders="hull"
+      type="kinematicPosition"
+      restitution={0.35}
+      friction={0.85}
+      linearDamping={0.15}
+      angularDamping={0.2}
+      canSleep
+    >
+      <DieMesh />
+    </RigidBody>
   );
 }
 
-/* Box contents (card deck / scorepad block): sit inside the box tracking an
- * anchor, then fly out to a floating park position beside the box. */
-function FlyOutItem({ anchorRef, park, out, progress, size, textureUrl, sideColor, parkScale = 1.18, texQuarterTurn = false }) {
+/* Card deck / scorepad block: rounded slab that rests flat in the tray, then
+ * flies UP and out to a park spot on the LEFT (Bézier so it clears the walls). */
+function FlyOutItem({ anchorRef, park, out, progress, size, textureUrl, sideColor, parkScale = 0.62, texQuarterTurn = false }) {
   const ref = useRef();
   const release = useRef(null);
   const v = useMemo(() => new Vector3(), []);
   const q = useMemo(() => new Quaternion(), []);
+  const A = useMemo(() => new Vector3(), []);
+  const C = useMemo(() => new Vector3(), []);
+  const P = useMemo(() => new Vector3(), []);
+  const B = useMemo(() => new Vector3(...park.pos), [park]);
   const parkQ = useMemo(() => new Quaternion().setFromEuler(new Euler(...park.rot)), [park]);
   const map = useLoader(TextureLoader, textureUrl);
   map.colorSpace = SRGBColorSpace;
   if (texQuarterTurn) {
-    // landscape artwork on a portrait face (the scorepad fills the tray)
     map.center.set(0.5, 0.5);
     map.rotation = Math.PI / 2;
   }
+  const corner = Math.min(0.08, Math.min(size[0], size[1]) * 0.09);
+  const bodyGeo = useMemo(() => roundedCardGeometry(size[0], size[1], size[2], corner), [size, corner]);
+  const topGeo = useMemo(() => roundedPlaneGeometry(size[0], size[1], corner), [size, corner]);
 
-  useFrame((state) => {
+  useFrame(() => {
     const item = ref.current;
     if (!item || !anchorRef.current) return;
     const t = easeInOut(phase(progress.current, out[0], out[1]));
-
     if (t <= 0) {
       anchorRef.current.getWorldPosition(v);
       anchorRef.current.getWorldQuaternion(q);
@@ -381,31 +635,113 @@ function FlyOutItem({ anchorRef, park, out, progress, size, textureUrl, sideColo
         anchorRef.current.getWorldQuaternion(q);
         release.current = { pos: v.clone(), quat: q.clone() };
       }
-      const s = release.current;
-      item.position.set(
-        MathUtils.lerp(s.pos.x, park.pos[0], t),
-        MathUtils.lerp(s.pos.y, park.pos[1], t) + Math.sin(t * Math.PI) * 0.5, // arc up and over
-        MathUtils.lerp(s.pos.z, park.pos[2], t)
-      );
-      item.quaternion.slerpQuaternions(s.quat, parkQ, t);
+      A.copy(release.current.pos);
+      C.copy(A).lerp(B, 0.22);
+      C.y += 2.6; // lift up out of the tray before gliding aside
+      const u = 1 - t;
+      P.copy(A).multiplyScalar(u * u).addScaledVector(C, 2 * u * t).addScaledVector(B, t * t);
+      item.position.copy(P);
+      item.quaternion.slerpQuaternions(release.current.quat, parkQ, t);
       item.scale.setScalar(MathUtils.lerp(1, parkScale, t));
-      // gentle float once parked
-      if (t >= 1 && !prefersReducedMotion) item.position.y = park.pos[1] + Math.sin(state.clock.elapsedTime * 1.4) * 0.05;
     }
   });
 
-  // boxGeometry material order: +x -x +y -y +z -z ; artwork on the +z face.
   return (
     <group ref={ref}>
-      <mesh>
-        <boxGeometry args={size} />
-        <meshStandardMaterial attach="material-0" color={sideColor} roughness={0.7} />
-        <meshStandardMaterial attach="material-1" color={sideColor} roughness={0.7} />
-        <meshStandardMaterial attach="material-2" color={sideColor} roughness={0.7} />
-        <meshStandardMaterial attach="material-3" color={sideColor} roughness={0.7} />
-        <meshStandardMaterial attach="material-4" map={map} roughness={0.55} />
-        <meshStandardMaterial attach="material-5" color={sideColor} roughness={0.7} />
+      <mesh geometry={bodyGeo}>
+        <meshStandardMaterial color={sideColor} roughness={0.62} />
       </mesh>
+      <mesh geometry={topGeo} position={[0, 0, size[2] / 2 + 0.003]}>
+        <meshStandardMaterial map={map} roughness={0.55} />
+      </mesh>
+    </group>
+  );
+}
+
+/* Damped scrub. */
+function ProgressSmoother({ targetRef, smoothRef }) {
+  useFrame((_, delta) => {
+    const k = 1 - Math.exp(-delta * 5.5);
+    smoothRef.current += (targetRef.current - smoothRef.current) * k;
+  });
+  return null;
+}
+
+/* Fixed angled camera that looks down into the tray, with a gentle push-in. */
+function CameraRig({ progress }) {
+  useFrame((state) => {
+    const t = easeInOut(phase(progress.current, 0, 0.5));
+    state.camera.position.set(0, MathUtils.lerp(4.4, 4.9, t), MathUtils.lerp(6.6, 6.0, t));
+    state.camera.lookAt(0, 0.05, 0.15);
+  });
+  return null;
+}
+
+/* An owl-eye socket on the lid interior, styled to mirror the front-cover eye
+ * (pink eyelid ring → green iris ring → dark socket the die nestles into). */
+function EyeSocket({ position }) {
+  return (
+    <group position={position} rotation={[Math.PI / 2, 0, 0]}>
+      <mesh position={[0, 0, 0]}>
+        <circleGeometry args={[0.33, 40]} />
+        <meshStandardMaterial color="#0a0a0a" roughness={0.6} />
+      </mesh>
+      <mesh position={[0, 0, 0.002]}>
+        <ringGeometry args={[0.3, 0.37, 40]} />
+        <meshStandardMaterial color={GREEN} roughness={0.5} toneMapped={false} />
+      </mesh>
+      <mesh position={[0, 0, 0.004]}>
+        <ringGeometry args={[0.37, 0.46, 40]} />
+        <meshStandardMaterial color={PINK} roughness={0.5} toneMapped={false} />
+      </mesh>
+    </group>
+  );
+}
+
+/* The LID: a slab with the owl art on top and the OPEN EYES flap underneath.
+ * Driven by scroll: lift → right → flip → settle; then the flap pivots open. */
+function Lid({ lidRef, progress, texture, flapTex }) {
+  const flapRef = useRef();
+  useFrame(() => {
+    const lid = lidRef.current;
+    if (!lid) return;
+    const p = progress.current;
+    lid.position.x = track(p, [[0, 0], [0.12, 0], [0.36, LID_REST.x]]);
+    lid.position.y = track(p, [[0, LID_CLOSED_Y], [0.15, LID_CLOSED_Y + 2.2], [0.42, LID_REST.y]]);
+    lid.position.z = track(p, [[0, 0], [0.36, LID_REST.z]]);
+    lid.rotation.x = track(p, [[0, 0], [0.16, 0], [0.4, Math.PI]]); // flip interior up
+    // Flap swings UP about its top-edge hinge (negative local X lifts the free
+    // -Z edge toward the interior normal, which points up after the lid flips).
+    if (flapRef.current) flapRef.current.rotation.x = -track(p, FLAP_KEYS);
+  });
+
+  return (
+    <group ref={lidRef} position={[0, LID_CLOSED_Y, 0]}>
+      {/* lid slab: owl art on +Y (top), pink interior on -Y */}
+      <mesh>
+        <boxGeometry args={[W + 0.05, LID_D, H + 0.05]} />
+        <meshStandardMaterial color="#0a0a0a" roughness={0.6} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, LID_D / 2 + 0.006, 0]}>
+        <planeGeometry args={[W * 0.98, H * 0.98]} />
+        <meshStandardMaterial map={texture} roughness={0.5} toneMapped={false} />
+      </mesh>
+      {/* interior surface (pink) */}
+      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, -LID_D / 2 - 0.006, 0]}>
+        <planeGeometry args={[W * 0.94, H * 0.94]} />
+        <meshStandardMaterial color={INSERT_PINK} roughness={0.7} />
+      </mesh>
+      {/* owl-eye sockets on the interior (mirror the front-cover eyes) */}
+      <EyeSocket position={[EYE_CUP_L.x, -LID_D / 2 - 0.01, EYE_SOCKET_Z]} />
+      <EyeSocket position={[EYE_CUP_R.x, -LID_D / 2 - 0.01, EYE_SOCKET_Z]} />
+      {/* OPEN EYES flap — hinged at its TOP (+Z) edge, extends -Z over the eyes,
+          swings up to reveal them */}
+      <group ref={flapRef} position={[0, FLAP_Y, FLAP_HINGE_Z]}>
+        <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, -FLAP_LEN / 2]}>
+          <planeGeometry args={[W * 0.9, FLAP_LEN]} />
+          <meshStandardMaterial map={flapTex} roughness={0.7} side={2} toneMapped={false} />
+        </mesh>
+      </group>
     </group>
   );
 }
@@ -413,171 +749,118 @@ function FlyOutItem({ anchorRef, park, out, progress, size, textureUrl, sideColo
 /* --------------------------------------------------------------- scene --- */
 
 function Scene({ progress }) {
-  const assemblyRef = useRef();
-  const lidRef = useRef();
-  const trayRef = useRef();
-  const anchorL = useRef();
-  const anchorR = useRef();
-  const cardAnchor = useRef();
-  const padAnchor = useRef();
   const texture = useLoader(TextureLoader, FRONT_TEXTURE);
   texture.colorSpace = SRGBColorSpace;
-
-  // Printed side panels (created once): spine with vertical title on the left,
-  // plain framed panels for the right/top/bottom edges — like the real box.
+  const flapTex = useMemo(makeFlapTexture, []);
   const panels = useMemo(
-    () => ({
-      spine: makePanelTexture(256, 2048, { label: 'HAPPY DOUBLE' }),
-      side: makePanelTexture(256, 2048),
-      edge: makePanelTexture(2048, 360),
-      zone: makeZoneLabel(),
-    }),
+    () => ({ felt: makeFeltTexture(), wallLabel: makeWallLabel() }),
     []
   );
 
-  useFrame((state) => {
-    const p = progress.current;
-    const tOpen = easeInOut(phase(p, OPEN_START, OPEN_END));
+  const lidRef = useRef();
+  const dieL = useRef();
+  const dieR = useRef();
+  const padAnchor = useRef();
+  const cardAnchor = useRef();
 
-    if (assemblyRef.current) {
-      const idle = 1 - tOpen;
-      assemblyRef.current.rotation.y = MathUtils.lerp(-0.4, 0, tOpen);
-      assemblyRef.current.position.y =
-        Math.sin(state.clock.elapsedTime * 1.3) * 0.05 * idle * (prefersReducedMotion ? 0 : 1);
-    }
-    if (lidRef.current) {
-      lidRef.current.position.set(
-        MathUtils.lerp(0, LID_OPEN.x, tOpen),
-        MathUtils.lerp(0, LID_OPEN.y, tOpen),
-        MathUtils.lerp(0.25, LID_OPEN.z + 0.25, tOpen)
-      );
-      lidRef.current.rotation.x = MathUtils.lerp(0, LID_OPEN.rotX, tOpen);
-    }
-    if (trayRef.current) {
-      trayRef.current.position.set(
-        MathUtils.lerp(0, TRAY_OPEN.x, tOpen),
-        MathUtils.lerp(0, TRAY_OPEN.y, tOpen),
-        MathUtils.lerp(-0.25, TRAY_OPEN.z, tOpen)
-      );
-      trayRef.current.rotation.x = MathUtils.lerp(0, TRAY_OPEN.rotX, tOpen);
-    }
-  });
-
-  const IW = W * 0.97; // tray outer width
-  const IH = H * 0.97; // tray outer height
+  const feltW = INNER_W - WALL * 0.8;
+  const feltH = INNER_H - WALL * 0.8;
+  // DICE-ZONE labels on the four inner walls (flat-tray orientations).
+  const LW = 1.1, LH = 1.1 / WALL_LABEL_ASPECT, yc = WALL_H * 0.5, d = 0.006;
+  const walls = [
+    { key: 'px', position: [INNER_W / 2 - d, yc, 0], quaternion: WALL_QUAT_PX },
+    { key: 'nx', position: [-INNER_W / 2 + d, yc, 0], quaternion: WALL_QUAT_NX },
+    { key: 'pz', position: [0, yc, INNER_H / 2 - d], quaternion: WALL_QUAT_PZ },
+    { key: 'nz', position: [0, yc, -INNER_H / 2 + d], quaternion: WALL_QUAT_NZ },
+  ];
 
   return (
     <>
-      {/* World-space actors (they track anchors inside the moving parts, so
-          they must NOT be children of the transformed groups). */}
-      <Die anchorRef={anchorL} landing={LAND_L} progress={progress} seed={{ a: 1.3, b: 0.9 }} restLabel="10" />
-      <Die anchorRef={anchorR} landing={LAND_R} progress={progress} seed={{ a: -1.0, b: 1.4 }} restLabel="7" />
+      {/* Lighting */}
+      <ambientLight intensity={0.55} />
+      <directionalLight position={[3, 7, 5]} intensity={2.6} castShadow />
+      <directionalLight position={[-4, 3, 4]} intensity={1.0} color="#fff0f8" />
+      <pointLight position={[-5, 2, 3]} intensity={22} color={PINK} distance={16} />
+      <pointLight position={[5, 2, 3]} intensity={20} color={GREEN} distance={16} />
+
+      <CameraRig progress={progress} />
+      <Lid lidRef={lidRef} progress={progress} texture={texture} flapTex={flapTex} />
+
+      {/* Contents that fly out to the left */}
       <FlyOutItem
         anchorRef={cardAnchor}
         park={CARD_PARK}
-        out={CARD_OUT}
+        out={CONTENT_OUT}
         progress={progress}
-        size={[0.95, 1.35, 0.28]}
+        size={CARD_SIZE}
         textureUrl={CARD_TEXTURE}
         sideColor={INSERT_PINK}
+        texQuarterTurn
       />
       <FlyOutItem
         anchorRef={padAnchor}
         park={PAD_PARK}
-        out={PAD_OUT}
+        out={[CONTENT_OUT[0] + 0.05, CONTENT_OUT[1] + 0.05]}
         progress={progress}
-        // the scorepad block fills the box interior and lies under the cards,
-        // exactly like the real game (reference video IMG_8244)
-        size={[2.31, 3.28, 0.08]}
+        size={PAD_SIZE}
         textureUrl={PAD_TEXTURE}
         sideColor="#e8e8e8"
-        parkScale={0.48}
         texQuarterTurn
       />
 
-      <group ref={assemblyRef}>
-        {/* ---- LID: front shell with the owl art, domes, dice aboard.
-             Per-face printed panels (no CG edge glow — the real box has none):
-             boxGeometry material order is +x, -x, +y, -y, +z, -z. ---- */}
-        <group ref={lidRef} position={[0, 0, 0.25]}>
-          <mesh>
-            <boxGeometry args={[W, H, LID_D]} />
-            <meshStandardMaterial attach="material-0" map={panels.side} roughness={0.55} />
-            <meshStandardMaterial attach="material-1" map={panels.spine} roughness={0.55} />
-            <meshStandardMaterial attach="material-2" map={panels.edge} roughness={0.55} />
-            <meshStandardMaterial attach="material-3" map={panels.edge} roughness={0.55} />
-            <meshStandardMaterial attach="material-4" color="#0a0a0a" roughness={0.6} />
-            <meshStandardMaterial attach="material-5" color="#0a0a0a" roughness={0.6} />
-          </mesh>
-          <mesh position={[0, 0, LID_D / 2 + 0.011]}>
-            <planeGeometry args={[W * 0.98, H * 0.98]} />
-            <meshStandardMaterial map={texture} roughness={0.5} toneMapped={false} />
-          </mesh>
-          {/* pink dice-compartment interior under the lid ("Fach für die Würfel") */}
-          <mesh position={[0, 0, -LID_D / 2 - 0.011]} rotation={[0, Math.PI, 0]}>
-            <planeGeometry args={[W * 0.94, H * 0.94]} />
-            <meshStandardMaterial color={INSERT_PINK} roughness={0.7} />
-          </mesh>
-          <EyeDieImpostor eye={EYE_L} url={EYE_IMPOSTOR_L} progress={progress} />
-          <EyeDieImpostor eye={EYE_R} url={EYE_IMPOSTOR_R} progress={progress} />
-          <object3D ref={anchorL} position={[EYE_L.x, EYE_L.y, EYE_L.z]} />
-          <object3D ref={anchorR} position={[EYE_R.x, EYE_R.y, EYE_R.z]} />
-        </group>
+      {/* ---- PHYSICS WORLD: stationary tray colliders + the two dice ---- */}
+      <Physics gravity={[0, -9.81, 0]} timeStep="vary">
+        {/* Tray colliders (fixed): floor + a TALL invisible fence around the
+            inner rim (FENCE_H ≫ the visible wall height) so the dice can't
+            bounce back out once they drop in. */}
+        <RigidBody type="fixed" colliders={false} restitution={0.25} friction={0.95}>
+          <CuboidCollider args={[W / 2, FLOOR_T / 2, H / 2]} position={[0, -FLOOR_T / 2, 0]} />
+          <CuboidCollider args={[WALL / 2, FENCE_H / 2, INNER_H / 2]} position={[INNER_W / 2 + WALL / 2, FENCE_H / 2, 0]} />
+          <CuboidCollider args={[WALL / 2, FENCE_H / 2, INNER_H / 2]} position={[-INNER_W / 2 - WALL / 2, FENCE_H / 2, 0]} />
+          <CuboidCollider args={[W / 2, FENCE_H / 2, WALL / 2]} position={[0, FENCE_H / 2, INNER_H / 2 + WALL / 2]} />
+          <CuboidCollider args={[W / 2, FENCE_H / 2, WALL / 2]} position={[0, FENCE_H / 2, -INNER_H / 2 - WALL / 2]} />
+        </RigidBody>
 
-        {/* ---- BOTTOM: open box with real interior depth ---- */}
-        <group ref={trayRef} position={[0, 0, -0.25]}>
-          {/* floor */}
-          <mesh position={[0, 0, -TRAY_D / 2 + WALL / 2]}>
-            <boxGeometry args={[IW, IH, WALL]} />
-            <meshStandardMaterial color="#0c0c0c" roughness={0.7} />
-          </mesh>
-          {/* walls: black outside, feather-pink INSIDE like the real tray
-              (per-face materials; inner faces get the insert pink) */}
-          <mesh position={[-IW / 2 + WALL / 2, 0, 0]}>
-            <boxGeometry args={[WALL, IH, TRAY_D]} />
-            <meshStandardMaterial attach="material-0" color={INSERT_PINK} roughness={0.65} />
-            {['material-1', 'material-2', 'material-3', 'material-4', 'material-5'].map((m) => (
-              <meshStandardMaterial key={m} attach={m} color="#0c0c0c" roughness={0.7} />
-            ))}
-          </mesh>
-          <mesh position={[IW / 2 - WALL / 2, 0, 0]}>
-            <boxGeometry args={[WALL, IH, TRAY_D]} />
-            <meshStandardMaterial attach="material-1" color={INSERT_PINK} roughness={0.65} />
-            {['material-0', 'material-2', 'material-3', 'material-4', 'material-5'].map((m) => (
-              <meshStandardMaterial key={m} attach={m} color="#0c0c0c" roughness={0.7} />
-            ))}
-          </mesh>
-          <mesh position={[0, IH / 2 - WALL / 2, 0]}>
-            <boxGeometry args={[IW - WALL * 2, WALL, TRAY_D]} />
-            <meshStandardMaterial attach="material-3" color={INSERT_PINK} roughness={0.65} />
-            {['material-0', 'material-1', 'material-2', 'material-4', 'material-5'].map((m) => (
-              <meshStandardMaterial key={m} attach={m} color="#0c0c0c" roughness={0.7} />
-            ))}
-          </mesh>
-          <mesh position={[0, -IH / 2 + WALL / 2, 0]}>
-            <boxGeometry args={[IW - WALL * 2, WALL, TRAY_D]} />
-            <meshStandardMaterial attach="material-2" color={INSERT_PINK} roughness={0.65} />
-            {['material-0', 'material-1', 'material-3', 'material-4', 'material-5'].map((m) => (
-              <meshStandardMaterial key={m} attach={m} color="#0c0c0c" roughness={0.7} />
-            ))}
-          </mesh>
+        <PhysicsDie apiRef={dieL} lidRef={lidRef} cupLocal={EYE_CUP_L} progress={progress} target={DIE_TARGET_L} />
+        <PhysicsDie apiRef={dieR} lidRef={lidRef} cupLocal={EYE_CUP_R} progress={progress} target={DIE_TARGET_R} />
+      </Physics>
 
-          {/* interior: green felt across the whole floor (the Würfel-Zone) */}
-          <mesh position={[0, 0, -TRAY_D / 2 + WALL + 0.005]}>
-            <planeGeometry args={[IW - WALL * 2.4, IH - WALL * 2.4]} />
-            <meshStandardMaterial color={FELT_GREEN} roughness={1} />
+      {/* ---- VISIBLE TRAY (stationary base, centered) ---- */}
+      <group>
+        {/* floor */}
+        <mesh position={[0, -FLOOR_T / 2, 0]} receiveShadow>
+          <boxGeometry args={[W, FLOOR_T, H]} />
+          <meshStandardMaterial color="#0c0c0c" roughness={0.7} />
+        </mesh>
+        {/* felt */}
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.002, 0]} receiveShadow>
+          <planeGeometry args={[feltW, feltH]} />
+          <meshStandardMaterial map={panels.felt} color={FELT_GREEN} roughness={1} metalness={0} />
+        </mesh>
+        {/* walls (inner pink, outer black) */}
+        {[
+          { pos: [INNER_W / 2 + WALL / 2, WALL_H / 2, 0], args: [WALL, WALL_H, H], inner: 'material-1' },
+          { pos: [-INNER_W / 2 - WALL / 2, WALL_H / 2, 0], args: [WALL, WALL_H, H], inner: 'material-0' },
+          { pos: [0, WALL_H / 2, INNER_H / 2 + WALL / 2], args: [W, WALL_H, WALL], inner: 'material-5' },
+          { pos: [0, WALL_H / 2, -INNER_H / 2 - WALL / 2], args: [W, WALL_H, WALL], inner: 'material-4' },
+        ].map((w, i) => (
+          <mesh key={i} position={w.pos}>
+            <boxGeometry args={w.args} />
+            {['material-0', 'material-1', 'material-2', 'material-3', 'material-4', 'material-5'].map((m) => (
+              <meshStandardMaterial key={m} attach={m} color={m === w.inner ? INSERT_PINK : '#0c0c0c'} roughness={0.68} />
+            ))}
           </mesh>
-          {/* printed WÜRFEL-ZONE pill near the front edge of the felt */}
-          <mesh position={[0, -IH / 2 + 0.45, -TRAY_D / 2 + WALL + 0.012]}>
-            <planeGeometry args={[1.1, 0.21]} />
-            <meshStandardMaterial map={panels.zone} transparent roughness={0.9} />
+        ))}
+        {/* DICE-ZONE labels */}
+        {walls.map((w) => (
+          <mesh key={w.key} position={w.position} quaternion={w.quaternion}>
+            <planeGeometry args={[LW, LH]} />
+            <meshStandardMaterial map={panels.wallLabel} transparent roughness={0.85} metalness={0} />
           </mesh>
-
-          {/* content anchors, stacked like the real box: the scorepad block
-              lies flat on the felt, the card deck sits on top of it */}
-          <object3D ref={padAnchor} position={[0, 0, -TRAY_D / 2 + WALL + 0.045]} />
-          <object3D ref={cardAnchor} position={[0, 0, -TRAY_D / 2 + WALL + 0.045 + 0.04 + 0.14]} />
-        </group>
+        ))}
+        {/* content rest anchors (flat: face up) */}
+        <object3D ref={padAnchor} position={[0, PAD_THICK / 2, 0]} rotation={[-Math.PI / 2, 0, 0]} />
+        <object3D ref={cardAnchor} position={[0, PAD_THICK + CARD_THICK / 2, CARD_Z]} rotation={[-Math.PI / 2, 0, 0]} />
       </group>
     </>
   );
@@ -585,20 +868,26 @@ function Scene({ progress }) {
 
 export default function BoxOpen3D() {
   const sectionRef = useRef(null);
-  const { scrollYProgress } = useScroll({
-    target: sectionRef,
-    offset: ['start start', 'end end'],
-  });
+  const { scrollYProgress } = useScroll({ target: sectionRef, offset: ['start start', 'end end'] });
 
-  const target = useRef(prefersReducedMotion ? 0.9 : 0);
-  const smooth = useRef(prefersReducedMotion ? 0.9 : 0);
+  const target = useRef(prefersReducedMotion ? 0.72 : 0);
+  const smooth = useRef(prefersReducedMotion ? 0.72 : 0);
   useMotionValueEvent(scrollYProgress, 'change', (v) => {
     if (!prefersReducedMotion) target.current = v;
   });
 
-  const capIntro = useTransform(scrollYProgress, [0, 0.14, 0.24], [1, 1, 0]);
-  const capOpen = useTransform(scrollYProgress, [0.3, 0.42, 0.58], [0, 1, 0]);
-  const capRoll = useTransform(scrollYProgress, [0.72, 0.85, 1], [0, 1, 1]);
+  const [active, setActive] = useState(true);
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(([e]) => setActive(e.isIntersecting), { rootMargin: '200px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  const capLid = useTransform(scrollYProgress, [0, 0.12, 0.34], [1, 1, 0]);
+  const capFlap = useTransform(scrollYProgress, [0.4, 0.52, 0.6], [0, 1, 0]);
+  const capRoll = useTransform(scrollYProgress, [0.66, 0.8, 1], [0, 1, 1]);
 
   return (
     <section ref={sectionRef} className="relative" style={{ height: '400vh' }}>
@@ -606,61 +895,34 @@ export default function BoxOpen3D() {
         <div
           aria-hidden
           className="pointer-events-none absolute left-1/2 top-1/2 h-[600px] w-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-25 blur-[130px]"
-          style={{
-            background: `radial-gradient(circle, ${PINK} 0%, ${GREEN} 55%, transparent 75%)`,
-          }}
+          style={{ background: `radial-gradient(circle, ${PINK} 0%, ${GREEN} 55%, transparent 75%)` }}
         />
-
         <Canvas
-          camera={{ position: [0, 0, 7.5], fov: 42 }}
-          dpr={[1, 2]}
-          gl={{ antialias: true, alpha: true }}
+          shadows
+          camera={{ position: [0, 4.4, 6.6], fov: 42 }}
+          dpr={[1, 1.5]}
+          frameloop={active ? 'always' : 'never'}
+          performance={{ min: 0.5 }}
+          gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
           className="!absolute inset-0"
         >
-          {/* Studio-style lighting matched to the hero render: neutral key +
-              soft fill, with only a whisper of brand-colored rim. */}
-          <ambientLight intensity={0.4} />
-          <directionalLight position={[3, 5, 6]} intensity={2.4} />
-          <directionalLight position={[-4, 2, 4]} intensity={0.9} color="#fff0f8" />
-          <pointLight position={[-5, 0, 3]} intensity={25} color={PINK} distance={14} />
-          <pointLight position={[5, -1, 3]} intensity={22} color={GREEN} distance={14} />
-          {/* Environment reflections (glass domes, dice sheen). Own Suspense:
-              if the HDR fetch fails, the scene still renders with the lights. */}
-          <Suspense fallback={null}>
-            <Environment preset="studio" environmentIntensity={0.35} />
-          </Suspense>
           <ProgressSmoother targetRef={target} smoothRef={smooth} />
-          <CameraRig progress={smooth} />
           <Suspense fallback={null}>
             <Scene progress={smooth} />
           </Suspense>
         </Canvas>
 
-        <motion.div style={{ opacity: capIntro }} className="pointer-events-none absolute bottom-16 left-0 right-0 text-center">
-          <p className="font-body text-xs uppercase tracking-[0.22em]" style={{ color: GREEN }}>
-            The owl keeps the dice
-          </p>
-          <p className="font-display mt-2 text-2xl font-bold text-[color:var(--color-text-primary)]">
-            Two D12, right in its eyes.
-          </p>
+        <motion.div style={{ opacity: capLid }} className="pointer-events-none absolute bottom-16 left-0 right-0 text-center">
+          <p className="font-body text-xs uppercase tracking-[0.22em]" style={{ color: GREEN }}>The box opens</p>
+          <p className="font-display mt-2 text-2xl font-bold text-[color:var(--color-text-primary)]">Lid off. Contents out.</p>
         </motion.div>
-
-        <motion.div style={{ opacity: capOpen }} className="pointer-events-none absolute bottom-16 left-0 right-0 text-center">
-          <p className="font-body text-xs uppercase tracking-[0.22em]" style={{ color: PINK }}>
-            Open it up
-          </p>
-          <p className="font-display mt-2 text-2xl font-bold text-[color:var(--color-text-primary)]">
-            Cards out. Scorepad out. The box is the arena.
-          </p>
+        <motion.div style={{ opacity: capFlap }} className="pointer-events-none absolute bottom-16 left-0 right-0 text-center">
+          <p className="font-body text-xs uppercase tracking-[0.22em]" style={{ color: PINK }}>Open eyes</p>
+          <p className="font-display mt-2 text-2xl font-bold text-[color:var(--color-text-primary)]">Two D12, in the owl&apos;s eyes.</p>
         </motion.div>
-
         <motion.div style={{ opacity: capRoll }} className="pointer-events-none absolute bottom-16 left-0 right-0 text-center">
-          <p className="font-body text-xs uppercase tracking-[0.22em]" style={{ color: GREEN }}>
-            No risk. No run.
-          </p>
-          <p className="font-display mt-2 text-2xl font-bold text-[color:var(--color-text-primary)]">
-            Roll. Keep the higher. Push your luck.
-          </p>
+          <p className="font-body text-xs uppercase tracking-[0.22em]" style={{ color: GREEN }}>No risk. No run.</p>
+          <p className="font-display mt-2 text-2xl font-bold text-[color:var(--color-text-primary)]">Roll. Keep the higher. Push your luck.</p>
         </motion.div>
       </div>
     </section>
