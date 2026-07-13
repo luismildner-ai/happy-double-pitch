@@ -78,50 +78,47 @@ const TRAY_FLOOR_Y = CAV_CEIL - 0.05; // black inner-tray floor, recessed near c
 const DIE_Y = CAV_CEIL - 0.09; // dice recessed into the circular slots
 const SLOT_R = 0.32; // circular dice-slot radius
 
-// ---- Two-tier stepped flip-lid (real board thickness) ----------------------
-// The lid seals the tray as a 2-tier "step": the FRONT 40% of the length is a
-// fixed raised block whose top face is flush with the tray's outer rim; the
-// REAR 60% is a recessed panel that hinges up 90° from the BACK rim to uncover
-// the two dice. Local frame: opening faces -Y, +Z = front (toward camera),
-// -Z = back (the fixed hinge line). The whole lid flips 180° earlier in the
+// ---- Rigid pink INSERT that sits inside the black tray ---------------------
+// The insert does NOT cover the whole tray — it is smaller and pushed toward
+// the BACK, so a matte-black floor border shows on its left, right and front.
+// Local frame: opening faces -Y, +Z = front (toward camera), -Z = back.
+// Layout (REVERSED step): a LOW flat pink section at the BACK, and an ELEVATED
+// AUGEN AUF! block at the FRONT. Only the elevated block moves — it hinges at
+// its own BACK edge and pivots up 90° (upward + backward), uncovering the two
+// dice wells hidden beneath it. The whole lid flips 180° earlier in the
 // sequence, so these -Y faces become the camera-facing (upward) surfaces.
 const OW = W + 0.05; // lid outer width
 const OH = H + 0.05; // lid outer length
-const STEP_T = 0.07; // rigid paperboard thickness (both tiers)
-const LID_INSET = LID_WALL + 0.03; // keep the tiers tucked inside the rim walls
-const TIER_W = OW - LID_INSET * 2; // shared tier width
-const Z_FRONT = OH / 2 - LID_INSET; // front inner edge
-const Z_BACK = -(OH / 2 - LID_INSET); // back inner edge (the hinge line)
-const TIER_SPAN = Z_FRONT - Z_BACK; // usable inner length
-const FRONT_LEN = TIER_SPAN * 0.4; // front tier = front 40% of the length
-const REAR_LEN = TIER_SPAN * 0.6; // rear flap = back 60%
-const FRONT_C = Z_FRONT - FRONT_LEN / 2; // front block centre z
-const SEAL_Y = CAV_OPEN + 0.01; // sealing plane: front top face flush w/ rim
-const FRONT_H = 0.22; // raised front block height (into the cavity)
-const STEP_DROP = 0.14; // how far the rear tier is recessed below the front
-const REAR_SURF_Y = SEAL_Y + STEP_DROP; // rear panel top face (recessed lower)
-// The whole pink lid is ONE rigid piece: the front block is re-expressed in the
-// rear flap's local frame so it hinges up together with the AUGEN AUF! panel
-// about the single rear X-hinge. (Closed-state geometry is unchanged.)
-const FRONT_LOCAL_Y = FRONT_H / 2 - STEP_DROP; // front block centre, flap-local Y
-const FRONT_LOCAL_Z = FRONT_C - Z_BACK; // front block centre, flap-local Z
-const FRONT_TOP_Y = FRONT_LOCAL_Y - FRONT_H / 2; // front block top face, flap-local Y
-const FLAP_CLOSED = 0; // rear flap lies flat, sealing the dice
-const FLAP_STAND = Math.PI / 2; // rear flap hinged fully vertical (90°)
+const LID_INSET = LID_WALL + 0.03; // rim-wall margin
+const INS_W = OW * 0.6; // insert width (leaves L/R black border)
+const INS_LEN = OH * 0.66; // insert length (leaves front black border)
+const INS_BACK = -OH / 2 + LID_INSET; // insert back edge (near the back rim)
+const INS_FRONT = INS_BACK + INS_LEN; // insert front edge (black border ahead)
+const INS_C = (INS_BACK + INS_FRONT) / 2; // insert centre z
+const LOWER_LEN = INS_LEN * 0.42; // low flat back section length
+const ELEV_LEN = INS_LEN * 0.58; // elevated front block length
+const Z_HINGE = INS_BACK + LOWER_LEN; // hinge = back edge of the elevated block
+const LOWER_C = (INS_BACK + Z_HINGE) / 2; // low section centre z
+const STEP_T = 0.06; // board thickness of the low flat back section
+const ELEV_H = 0.26; // elevated block height (the raised step)
+const SEAL_Y = CAV_OPEN + 0.02; // elevated block TOP face (near the rim)
+const LOW_TOP_Y = SEAL_Y + 0.14; // low back section top face (recessed below)
+const PINK_W = INS_W * 0.9; // pink piece width (black border inside the insert)
+const FLAP_CLOSED = 0; // elevated block lies flat, sealing the dice
+const FLAP_STAND = Math.PI / 2; // elevated block hinged fully vertical (90°)
 const FLAP_OPEN = [0.45, 0.6]; // scroll window over which it hinges open
 
 // ---- Green latch: a long FLAT fabric ribbon (not a loop) -------------------
-// It lies flat on top of the AUGEN AUF! panel, wraps over the panel's leading
-// (front) edge, and hangs past it as a finger grab-tab. Parented inside the
-// flap group, so it is rigidly locked to the panel: when the flap swings up on
-// its rear hinge the whole ribbon rides up and the tab stands vertical (as if
-// held in the hand). Only the free tab gets an extra tilt as it "pulls taut".
+// Attaches to the FRONT lip of the elevated block: it lies flat on the block's
+// top, wraps over the front vertical face, and hangs past it as a grab-tab.
+// Parented inside the flap group, so it is rigidly locked to the block: when
+// the block hinges up the whole ribbon rides up and the tab stands vertical (as
+// if held in the hand). Only the free tab gets an extra tilt as it pulls taut.
 const RIB_W = 0.2; // ribbon strip width
 const RIB_T = 0.02; // ribbon strip thickness (thin, flat)
-const RIB_TOP_LEN = FRONT_LEN * 0.85; // length lying flat on the lid top
-const RIB_TAB_LEN = 0.5; // grab-tab length past the leading edge
-const LATCH_Z = FRONT_LOCAL_Z + FRONT_LEN / 2; // lid leading edge, flap-local Z
-const TAB_DROOP = 1.15; // closed: tab bends down over the edge toward the floor
+const RIB_TOP_LEN = ELEV_LEN * 0.72; // length lying flat on the block top
+const RIB_TAB_LEN = 0.5; // grab-tab length past the front lip
+const TAB_DROOP = 1.15; // closed: tab bends down over the lip toward the floor
 const TAB_PULL = -0.15; // open: tab pulls up/forward, taut in the hand
 
 const INNER_W = W - WALL * 2;
@@ -145,12 +142,12 @@ const LID_REST = { x: 2.9, y: 0.7, z: 0 };
 const PAD_PARK = { pos: [-2.9, 0.32, 0], rot: [-Math.PI / 2, 0, 0] };
 const CARD_PARK = { pos: [-2.9, 0.58, 0], rot: [-Math.PI / 2, 0, 0] };
 
-// Dice housing: a black inner tray with two circular slots split by a centre
-// partition, recessed beneath the rear flap so it covers them when shut.
-const DICE_Z = -0.2; // centre of the dice wells (sits under the rear flap)
-const DICE_TRAY_LEN = 0.95; // z-length of the black dice-well plate
-const EYE_CUP_L = new Vector3(-0.54, DIE_Y, DICE_Z);
-const EYE_CUP_R = new Vector3(0.54, DIE_Y, DICE_Z);
+// Dice housing: two circular slots in the black tray floor, centred UNDER the
+// elevated AUGEN AUF! block so it covers them when shut and reveals them on lift.
+const DICE_Z = (Z_HINGE + INS_FRONT) / 2; // dice centre (under the elevated block)
+const DICE_TRAY_LEN = ELEV_LEN * 0.82; // z-length of the black dice-well plate
+const EYE_CUP_L = new Vector3(-0.42, DIE_Y, DICE_Z);
+const EYE_CUP_R = new Vector3(0.42, DIE_Y, DICE_Z);
 
 // Stage timings.
 const RELEASE = 0.62; // dice hand off to physics here
@@ -806,12 +803,15 @@ function Lid({ lidRef, progress, texture, flapTex, feather, infoTex }) {
         <meshStandardMaterial map={infoTex} transparent roughness={0.6} toneMapped={false} />
       </mesh>
 
-      {/* ---- BLACK INNER TRAY (dice housing, recessed beneath the rear flap) ---- */}
-      <mesh position={[0, TRAY_FLOOR_Y + 0.015, DICE_Z]}>
-        <boxGeometry args={[TIER_W, 0.03, DICE_TRAY_LEN]} />
+      {/* ---- BLACK TRAY FLOOR: the pink insert sits in it. Sized to the insert
+          footprint and set back, so a matte-black border shows on the sides and
+          front. The two dice wells are recessed into it, under the elevated
+          block. ---- */}
+      <mesh position={[0, TRAY_FLOOR_Y + 0.02, INS_C]}>
+        <boxGeometry args={[INS_W, 0.04, INS_LEN]} />
         <meshStandardMaterial color="#0b0b0b" roughness={0.72} />
       </mesh>
-      {/* centre partition between the two slots */}
+      {/* centre partition between the two dice slots */}
       <mesh position={[0, TRAY_FLOOR_Y - 0.05, DICE_Z]}>
         <boxGeometry args={[0.05, 0.14, DICE_TRAY_LEN * 0.7]} />
         <meshStandardMaterial color="#0a0a0a" roughness={0.72} />
@@ -819,48 +819,46 @@ function Lid({ lidRef, progress, texture, flapTex, feather, infoTex }) {
       <DiceSlot position={[EYE_CUP_L.x, TRAY_FLOOR_Y, DICE_Z]} />
       <DiceSlot position={[EYE_CUP_R.x, TRAY_FLOOR_Y, DICE_Z]} />
 
-      {/* ---- THE PINK LID: ONE rigid stepped piece (raised front block + rear
-          AUGEN AUF! panel) hinged about the single BACK rim (Z_BACK). Pull the
-          ribbon and the whole thing swings up to 90°, uncovering the dice. It is
-          a solid rigid body — nothing bends. Both the front block and the rear
-          panel are children of this group, so they rotate together. ---- */}
-      <group ref={flapRef} position={[0, REAR_SURF_Y, Z_BACK]}>
-        {/* rear panel (the AUGEN AUF! tier) */}
-        <mesh position={[0, 0, REAR_LEN / 2]}>
-          <boxGeometry args={[TIER_W, STEP_T, REAR_LEN]} />
+      {/* ---- LOW FLAT PINK SECTION (back of the insert, FIXED — does not move) ---- */}
+      <mesh position={[0, LOW_TOP_Y + STEP_T / 2, LOWER_C]}>
+        <boxGeometry args={[PINK_W, STEP_T, LOWER_LEN]} />
+        <meshStandardMaterial map={feather} roughness={0.72} toneMapped={false} />
+      </mesh>
+
+      {/* ---- ELEVATED AUGEN AUF! BLOCK (front of the insert) — the ONLY moving
+          part. A solid rigid block hinged at its own BACK edge (Z_HINGE); pull
+          the ribbon and it pivots up 90° (upward + backward), uncovering the two
+          dice wells beneath it. Nothing bends. ---- */}
+      <group ref={flapRef} position={[0, SEAL_Y, Z_HINGE]}>
+        {/* the rigid raised block; its top face sits at the pivot (local y = 0) */}
+        <mesh position={[0, ELEV_H / 2, ELEV_LEN / 2]}>
+          <boxGeometry args={[PINK_W, ELEV_H, ELEV_LEN]} />
           <meshStandardMaterial map={feather} roughness={0.72} toneMapped={false} />
         </mesh>
-        {/* AUGEN AUF! artwork on the rear panel's outward (-Y) face */}
-        <mesh position={[0, -STEP_T / 2 - 0.004, REAR_LEN / 2]} rotation={[Math.PI / 2, 0, 0]}>
-          <planeGeometry args={[TIER_W * 0.92, REAR_LEN * 0.82]} />
+        {/* AUGEN AUF! sticker squarely on TOP (-Y face) of the elevated block */}
+        <mesh position={[0, -0.004, ELEV_LEN / 2]} rotation={[Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[PINK_W * 0.9, ELEV_LEN * 0.8]} />
           <meshBasicMaterial map={flapTex} toneMapped={false} />
         </mesh>
-        {/* raised front block — same rigid piece, re-expressed in flap-local */}
-        <mesh position={[0, FRONT_LOCAL_Y, FRONT_LOCAL_Z]}>
-          <boxGeometry args={[TIER_W, FRONT_H, FRONT_LEN]} />
-          <meshStandardMaterial map={feather} roughness={0.72} toneMapped={false} />
-        </mesh>
 
-        {/* ---- GREEN LATCH: a long FLAT fabric ribbon (flat strips, no loop).
-            Anchored at the lid's leading (front) edge — the front block's front
-            face, which becomes the TOP when the lid stands up. Lives inside the
-            rigid group, so it rides up to vertical as one. Three flat segments:
-            (1) lies flat on the lid top, (2) wraps over the front vertical edge,
-            (3) a grab-tab hanging past it that tilts from a floor-ward droop
-            (closed) to taut in the hand (open). ---- */}
-        <group position={[0, FRONT_TOP_Y, LATCH_Z]}>
-          {/* (1) strip lying flat on the lid top, running back from the edge */}
+        {/* ---- GREEN LATCH on the FRONT lip: a long FLAT fabric ribbon (flat
+            strips, no loop). (1) lies flat on the block top, (2) wraps over the
+            front vertical face, (3) a grab-tab hanging past the lip. Rigidly
+            parented, so it rides up as the block hinges; the tab tilts from a
+            floor-ward droop (closed) to taut in the hand (open). ---- */}
+        <group position={[0, 0, ELEV_LEN]}>
+          {/* (1) strip lying flat on the block top, running back from the lip */}
           <mesh position={[0, -RIB_T / 2 - 0.002, -RIB_TOP_LEN / 2]}>
             <boxGeometry args={[RIB_W, RIB_T, RIB_TOP_LEN]} />
             <meshStandardMaterial color={GREEN} roughness={0.85} metalness={0} toneMapped={false} />
           </mesh>
           {/* (2) wrap capping the front vertical face of the block */}
-          <mesh position={[0, FRONT_H / 2, RIB_T / 2 + 0.002]}>
-            <boxGeometry args={[RIB_W, FRONT_H + RIB_T, RIB_T]} />
+          <mesh position={[0, ELEV_H / 2, RIB_T / 2 + 0.002]}>
+            <boxGeometry args={[RIB_W, ELEV_H + RIB_T, RIB_T]} />
             <meshStandardMaterial color={GREEN} roughness={0.85} metalness={0} toneMapped={false} />
           </mesh>
-          {/* (3) grab-tab past the edge — pivots at the bottom of the wrap */}
-          <group ref={tabRef} position={[0, FRONT_H, RIB_T + 0.002]} rotation={[TAB_DROOP, 0, 0]}>
+          {/* (3) grab-tab past the lip — pivots at the bottom of the wrap */}
+          <group ref={tabRef} position={[0, ELEV_H, RIB_T + 0.002]} rotation={[TAB_DROOP, 0, 0]}>
             <mesh position={[0, 0, RIB_TAB_LEN / 2]}>
               <boxGeometry args={[RIB_W, RIB_T, RIB_TAB_LEN]} />
               <meshStandardMaterial color={GREEN} roughness={0.85} metalness={0} toneMapped={false} />
