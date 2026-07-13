@@ -78,25 +78,31 @@ const TRAY_FLOOR_Y = CAV_CEIL - 0.05; // black inner-tray floor, recessed near c
 const DIE_Y = CAV_CEIL - 0.09; // dice recessed into the circular slots
 const SLOT_R = 0.32; // circular dice-slot radius
 
-// ---- Accordion flip-top lid (real board thickness, Z-fold → standing stack) -
-// A single scored cardstock strip anchored at the BACK rim (-Z), creased into
-// three segments. Closed = a stepped Z-fold sealing the tray; pull the ribbon
-// and it collapses up into a compact vertical stack, exposing the dice.
-//   +Z = front / open area (toward camera)      -Z = back / fixed anchor hinge
-//   -Y (out of the cavity) = the direction everything lifts/rises.
-const SEG_T = 0.05; // board thickness (rigid paperboard)
-const SEG_Y = CAV_OPEN + 0.04; // low level: Segment A's top face (front flap)
-const RISER_H = 0.3; // Segment B height (middle-tier riser face)
-const SEG_LEN_C = 0.8; // Segment C length (top rear flap, anchored at rim)
-const SEG_LEN_A = 1.05; // Segment A length (front flap w/ AUGEN AUF! + ribbon)
-const ACC_HINGE_Z = -1.62; // rear-rim anchor: Segment C hinges here
-const SEG_W = W * 0.9; // strip width (fits inside the rim walls)
-// Accordion joint angles (rotation.x of each nested hinge group):
-//   CLOSED Z-fold:  C flat(0)  ·  B folds down(-90°)  ·  A flat again(+90°)
-//   OPEN  stack:    C stands up(+90°) · B folds back(-180°) · A stands(+180°)
-const ACC_CLOSED = { c: 0, b: -Math.PI / 2, a: Math.PI / 2 };
-const ACC_OPEN = { c: Math.PI / 2, b: -Math.PI, a: Math.PI };
-const FLAP_OPEN = [0.45, 0.6]; // scroll window over which it opens
+// ---- Two-tier stepped flip-lid (real board thickness) ----------------------
+// The lid seals the tray as a 2-tier "step": the FRONT 40% of the length is a
+// fixed raised block whose top face is flush with the tray's outer rim; the
+// REAR 60% is a recessed panel that hinges up 90° from the BACK rim to uncover
+// the two dice. Local frame: opening faces -Y, +Z = front (toward camera),
+// -Z = back (the fixed hinge line). The whole lid flips 180° earlier in the
+// sequence, so these -Y faces become the camera-facing (upward) surfaces.
+const OW = W + 0.05; // lid outer width
+const OH = H + 0.05; // lid outer length
+const STEP_T = 0.07; // rigid paperboard thickness (both tiers)
+const LID_INSET = LID_WALL + 0.03; // keep the tiers tucked inside the rim walls
+const TIER_W = OW - LID_INSET * 2; // shared tier width
+const Z_FRONT = OH / 2 - LID_INSET; // front inner edge
+const Z_BACK = -(OH / 2 - LID_INSET); // back inner edge (the hinge line)
+const TIER_SPAN = Z_FRONT - Z_BACK; // usable inner length
+const FRONT_LEN = TIER_SPAN * 0.4; // front tier = front 40% of the length
+const REAR_LEN = TIER_SPAN * 0.6; // rear flap = back 60%
+const FRONT_C = Z_FRONT - FRONT_LEN / 2; // front block centre z
+const SEAL_Y = CAV_OPEN + 0.01; // sealing plane: front top face flush w/ rim
+const FRONT_H = 0.22; // raised front block height (into the cavity)
+const STEP_DROP = 0.14; // how far the rear tier is recessed below the front
+const REAR_SURF_Y = SEAL_Y + STEP_DROP; // rear panel top face (recessed lower)
+const FLAP_CLOSED = 0; // rear flap lies flat, sealing the dice
+const FLAP_STAND = Math.PI / 2; // rear flap hinged fully vertical (90°)
+const FLAP_OPEN = [0.45, 0.6]; // scroll window over which it hinges open
 
 const INNER_W = W - WALL * 2;
 const INNER_H = H - WALL * 2;
@@ -120,8 +126,8 @@ const PAD_PARK = { pos: [-2.9, 0.32, 0], rot: [-Math.PI / 2, 0, 0] };
 const CARD_PARK = { pos: [-2.9, 0.58, 0], rot: [-Math.PI / 2, 0, 0] };
 
 // Dice housing: a black inner tray with two circular slots split by a centre
-// partition, recessed beneath Segment A so the front flap covers them when shut.
-const DICE_Z = -0.2; // centre of the dice wells (sits under Segment A)
+// partition, recessed beneath the rear flap so it covers them when shut.
+const DICE_Z = -0.2; // centre of the dice wells (sits under the rear flap)
 const DICE_TRAY_LEN = 0.95; // z-length of the black dice-well plate
 const EYE_CUP_L = new Vector3(-0.54, DIE_Y, DICE_Z);
 const EYE_CUP_R = new Vector3(0.54, DIE_Y, DICE_Z);
@@ -314,46 +320,6 @@ function makeFlapTexture() {
   const t = new CanvasTexture(c);
   t.colorSpace = SRGBColorSpace;
   t.anisotropy = 4;
-  return t;
-}
-
-// Owl-eyes decal for Segment C's inner face — revealed (glowing lime on black)
-// when the top rear flap stands up, exactly like the physical box.
-function makeEyesTexture() {
-  const cw = 1024, ch = 340;
-  const c = document.createElement('canvas');
-  c.width = cw;
-  c.height = ch;
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = '#070707';
-  ctx.fillRect(0, 0, cw, ch);
-  const eye = (cx) => {
-    // soft green glow
-    const g = ctx.createRadialGradient(cx, ch * 0.5, 8, cx, ch * 0.5, 150);
-    g.addColorStop(0, 'rgba(166,226,46,0.55)');
-    g.addColorStop(1, 'rgba(166,226,46,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(cx - 160, 0, 320, ch);
-    // almond eye
-    ctx.fillStyle = GREEN;
-    ctx.beginPath();
-    ctx.ellipse(cx, ch * 0.5, 118, 92, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // dark ring + pupil
-    ctx.fillStyle = '#0a0a0a';
-    ctx.beginPath();
-    ctx.arc(cx, ch * 0.5, 62, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.beginPath();
-    ctx.arc(cx - 18, ch * 0.5 - 22, 14, 0, Math.PI * 2);
-    ctx.fill();
-  };
-  eye(cw * 0.31);
-  eye(cw * 0.69);
-  const t = new CanvasTexture(c);
-  t.colorSpace = SRGBColorSpace;
-  t.anisotropy = 8;
   return t;
 }
 
@@ -764,16 +730,14 @@ function DiceSlot({ position }) {
  *  - Top plate (owl art) + thick rim walls form the cavity.
  *  - A BLACK INNER TRAY holds the two dice in circular slots, split by a centre
  *    partition, recessed near the ceiling.
- *  - An ACCORDION FLIP-TOP LID (one scored strip, three thick board segments)
- *    seals the tray. Anchored at the back rim, it is a stepped Z-fold when shut
- *    (Segment A flat over the dice → Segment B riser → Segment C on top) and
- *    collapses into a compact standing stack when the ribbon is pulled,
- *    revealing the owl-eyes inner face and the dice beneath.
- *  - Scroll drives lift → right → flip → settle, then the accordion opens. */
-function Lid({ lidRef, progress, texture, flapTex, feather, eyesTex, infoTex }) {
-  const segCRef = useRef();
-  const segBRef = useRef();
-  const segARef = useRef();
+ *  - A TWO-TIER STEPPED LID (thick rigid board) seals the tray: a fixed raised
+ *    FRONT block (front 40%, top flush with the rim) and a recessed REAR panel
+ *    (back 60%, carrying the AUGEN AUF! art + ribbon). Pulling the ribbon hinges
+ *    only the rear panel up 90° from the back rim, uncovering the dice; the
+ *    front block never moves.
+ *  - Scroll drives lift → right → flip → settle, then the rear flap opens. */
+function Lid({ lidRef, progress, texture, flapTex, feather, infoTex }) {
+  const flapRef = useRef();
   useFrame(() => {
     const lid = lidRef.current;
     if (!lid) return;
@@ -782,15 +746,11 @@ function Lid({ lidRef, progress, texture, flapTex, feather, eyesTex, infoTex }) 
     lid.position.y = track(p, [[0, LID_CLOSED_Y], [0.15, LID_CLOSED_Y + 2.2], [0.42, LID_REST.y]]);
     lid.position.z = track(p, [[0, 0], [0.36, LID_REST.z]]);
     lid.rotation.x = track(p, [[0, 0], [0.16, 0], [0.4, Math.PI]]); // flip interior up
-    // Accordion: lerp each nested hinge from its CLOSED Z-fold angle to its OPEN
-    // standing-stack angle across the FLAP_OPEN scroll window.
+    // Rear flap: hinge from flat to fully vertical across the FLAP_OPEN window.
+    // Only this back-60% panel moves; the raised front block stays put.
     const t = easeInOut(phase(p, FLAP_OPEN[0], FLAP_OPEN[1]));
-    if (segCRef.current) segCRef.current.rotation.x = MathUtils.lerp(ACC_CLOSED.c, ACC_OPEN.c, t);
-    if (segBRef.current) segBRef.current.rotation.x = MathUtils.lerp(ACC_CLOSED.b, ACC_OPEN.b, t);
-    if (segARef.current) segARef.current.rotation.x = MathUtils.lerp(ACC_CLOSED.a, ACC_OPEN.a, t);
+    if (flapRef.current) flapRef.current.rotation.x = MathUtils.lerp(FLAP_CLOSED, FLAP_STAND, t);
   });
-
-  const OW = W + 0.05, OH = H + 0.05; // lid outer footprint
 
   return (
     <group ref={lidRef} position={[0, LID_CLOSED_Y, 0]}>
@@ -823,9 +783,9 @@ function Lid({ lidRef, progress, texture, flapTex, feather, eyesTex, infoTex }) 
         <meshStandardMaterial map={infoTex} transparent roughness={0.6} toneMapped={false} />
       </mesh>
 
-      {/* ---- BLACK INNER TRAY (dice housing) ---- */}
+      {/* ---- BLACK INNER TRAY (dice housing, recessed beneath the rear flap) ---- */}
       <mesh position={[0, TRAY_FLOOR_Y + 0.015, DICE_Z]}>
-        <boxGeometry args={[SEG_W, 0.03, DICE_TRAY_LEN]} />
+        <boxGeometry args={[TIER_W, 0.03, DICE_TRAY_LEN]} />
         <meshStandardMaterial color="#0b0b0b" roughness={0.72} />
       </mesh>
       {/* centre partition between the two slots */}
@@ -836,48 +796,33 @@ function Lid({ lidRef, progress, texture, flapTex, feather, eyesTex, infoTex }) 
       <DiceSlot position={[EYE_CUP_L.x, TRAY_FLOOR_Y, DICE_Z]} />
       <DiceSlot position={[EYE_CUP_R.x, TRAY_FLOOR_Y, DICE_Z]} />
 
-      {/* ---- ACCORDION FLIP-TOP LID (nested hinge chain, anchored back rim) ----
-          Each group's pivot sits on a crease line; children hang off the far
-          edge of the parent segment. Rotations are driven above. */}
-      <group ref={segCRef} position={[0, SEG_Y - RISER_H, ACC_HINGE_Z]}>
-        {/* Segment C — top rear flap (board thickness) */}
-        <mesh position={[0, 0, SEG_LEN_C / 2]}>
-          <boxGeometry args={[SEG_W, SEG_T, SEG_LEN_C]} />
+      {/* ---- FRONT TIER: fixed raised block (front 40%). Its top face sits
+          flush with the rim; a crisp vertical step drops to the rear tier.
+          It never moves when the rear flap opens. ---- */}
+      <mesh position={[0, SEAL_Y + FRONT_H / 2, FRONT_C]}>
+        <boxGeometry args={[TIER_W, FRONT_H, FRONT_LEN]} />
+        <meshStandardMaterial map={feather} roughness={0.72} toneMapped={false} />
+      </mesh>
+
+      {/* ---- REAR TIER: recessed flap (back 60%). Hinges about the BACK rim
+          (its pivot group sits at Z_BACK) and lifts to vertical, uncovering
+          the dice. AUGEN AUF! art rides on its outward (-Y) face; the ribbon
+          tab sits at the back rim. ---- */}
+      <group ref={flapRef} position={[0, REAR_SURF_Y, Z_BACK]}>
+        <mesh position={[0, 0, REAR_LEN / 2]}>
+          <boxGeometry args={[TIER_W, STEP_T, REAR_LEN]} />
           <meshStandardMaterial map={feather} roughness={0.72} toneMapped={false} />
         </mesh>
-        {/* owl-eyes decal on C's outer (-Y) face. Because the lid flips 180°
-            before the accordion opens, this is the face that turns to the
-            camera as the rear flap stands upright — the "AUGEN AUF!" reveal. */}
-        <mesh position={[0, -SEG_T / 2 - 0.004, SEG_LEN_C / 2]} rotation={[Math.PI / 2, 0, 0]}>
-          <planeGeometry args={[SEG_W * 0.92, SEG_LEN_C * 0.82]} />
-          <meshBasicMaterial map={eyesTex} toneMapped={false} />
+        {/* AUGEN AUF! artwork on the flap's outward (-Y) face */}
+        <mesh position={[0, -STEP_T / 2 - 0.004, REAR_LEN / 2]} rotation={[Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[TIER_W * 0.92, REAR_LEN * 0.82]} />
+          <meshBasicMaterial map={flapTex} toneMapped={false} />
         </mesh>
-
-        {/* Segment B — middle-tier riser face */}
-        <group ref={segBRef} position={[0, 0, SEG_LEN_C]}>
-          <mesh position={[0, 0, RISER_H / 2]}>
-            <boxGeometry args={[SEG_W, SEG_T, RISER_H]} />
-            <meshStandardMaterial map={feather} roughness={0.72} toneMapped={false} />
-          </mesh>
-
-          {/* Segment A — front flap with the AUGEN AUF! sticker + ribbon */}
-          <group ref={segARef} position={[0, 0, RISER_H]}>
-            <mesh position={[0, 0, SEG_LEN_A / 2]}>
-              <boxGeometry args={[SEG_W, SEG_T, SEG_LEN_A]} />
-              <meshStandardMaterial map={feather} roughness={0.72} toneMapped={false} />
-            </mesh>
-            {/* AUGEN AUF! artwork on A's outer (-Y) face */}
-            <mesh position={[0, -SEG_T / 2 - 0.004, SEG_LEN_A / 2]} rotation={[Math.PI / 2, 0, 0]}>
-              <planeGeometry args={[SEG_W * 0.95, SEG_LEN_A * 0.9]} />
-              <meshBasicMaterial map={flapTex} toneMapped={false} />
-            </mesh>
-            {/* lime-green pull ribbon looping off A's free front (+Z) edge */}
-            <mesh position={[0, -SEG_T / 2 - 0.05, SEG_LEN_A + 0.02]} rotation={[0.5, 0, 0]}>
-              <boxGeometry args={[0.2, 0.16, 0.04]} />
-              <meshStandardMaterial color={GREEN} roughness={0.5} toneMapped={false} />
-            </mesh>
-          </group>
-        </group>
+        {/* lime-green ribbon pull-tab at the back rim (rides up with the flap) */}
+        <mesh position={[0, -STEP_T / 2 - 0.05, 0.05]} rotation={[0.5, 0, 0]}>
+          <boxGeometry args={[0.24, 0.18, 0.04]} />
+          <meshStandardMaterial color={GREEN} roughness={0.5} toneMapped={false} />
+        </mesh>
       </group>
     </group>
   );
@@ -897,7 +842,6 @@ function Scene({ progress }) {
       warning: makeWarningDecal(),
       title: makeTitleDecal(),
       lidInfo: makeLidInfoDecal(),
-      eyes: makeEyesTexture(),
     }),
     []
   );
@@ -935,7 +879,6 @@ function Scene({ progress }) {
         texture={texture}
         flapTex={flapTex}
         feather={panels.feather}
-        eyesTex={panels.eyes}
         infoTex={panels.lidInfo}
       />
 
