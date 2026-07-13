@@ -100,6 +100,12 @@ const SEAL_Y = CAV_OPEN + 0.01; // sealing plane: front top face flush w/ rim
 const FRONT_H = 0.22; // raised front block height (into the cavity)
 const STEP_DROP = 0.14; // how far the rear tier is recessed below the front
 const REAR_SURF_Y = SEAL_Y + STEP_DROP; // rear panel top face (recessed lower)
+// The whole pink lid is ONE rigid piece: the front block is re-expressed in the
+// rear flap's local frame so it hinges up together with the AUGEN AUF! panel
+// about the single rear X-hinge. (Closed-state geometry is unchanged.)
+const FRONT_LOCAL_Y = FRONT_H / 2 - STEP_DROP; // front block centre, flap-local Y
+const FRONT_LOCAL_Z = FRONT_C - Z_BACK; // front block centre, flap-local Z
+const FRONT_TOP_Y = FRONT_LOCAL_Y - FRONT_H / 2; // front block top face, flap-local Y
 const FLAP_CLOSED = 0; // rear flap lies flat, sealing the dice
 const FLAP_STAND = Math.PI / 2; // rear flap hinged fully vertical (90°)
 const FLAP_OPEN = [0.45, 0.6]; // scroll window over which it hinges open
@@ -112,8 +118,9 @@ const FLAP_OPEN = [0.45, 0.6]; // scroll window over which it hinges open
 // held in the hand). Only the free tab gets an extra tilt as it "pulls taut".
 const RIB_W = 0.2; // ribbon strip width
 const RIB_T = 0.02; // ribbon strip thickness (thin, flat)
-const RIB_TOP_LEN = REAR_LEN * 0.72; // length lying flat on the panel top
+const RIB_TOP_LEN = FRONT_LEN * 0.85; // length lying flat on the lid top
 const RIB_TAB_LEN = 0.5; // grab-tab length past the leading edge
+const LATCH_Z = FRONT_LOCAL_Z + FRONT_LEN / 2; // lid leading edge, flap-local Z
 const TAB_DROOP = 1.15; // closed: tab bends down over the edge toward the floor
 const TAB_PULL = -0.15; // open: tab pulls up/forward, taut in the hand
 
@@ -812,48 +819,48 @@ function Lid({ lidRef, progress, texture, flapTex, feather, infoTex }) {
       <DiceSlot position={[EYE_CUP_L.x, TRAY_FLOOR_Y, DICE_Z]} />
       <DiceSlot position={[EYE_CUP_R.x, TRAY_FLOOR_Y, DICE_Z]} />
 
-      {/* ---- FRONT TIER: fixed raised block (front 40%). Its top face sits
-          flush with the rim; a crisp vertical step drops to the rear tier.
-          It never moves when the rear flap opens. ---- */}
-      <mesh position={[0, SEAL_Y + FRONT_H / 2, FRONT_C]}>
-        <boxGeometry args={[TIER_W, FRONT_H, FRONT_LEN]} />
-        <meshStandardMaterial map={feather} roughness={0.72} toneMapped={false} />
-      </mesh>
-
-      {/* ---- REAR TIER: recessed flap (back 60%). Hinges about the BACK rim
-          (its pivot group sits at Z_BACK) and lifts to vertical, uncovering
-          the dice. AUGEN AUF! art rides on its outward (-Y) face; the green
-          latch loop is fixed to its leading (front) edge. ---- */}
+      {/* ---- THE PINK LID: ONE rigid stepped piece (raised front block + rear
+          AUGEN AUF! panel) hinged about the single BACK rim (Z_BACK). Pull the
+          ribbon and the whole thing swings up to 90°, uncovering the dice. It is
+          a solid rigid body — nothing bends. Both the front block and the rear
+          panel are children of this group, so they rotate together. ---- */}
       <group ref={flapRef} position={[0, REAR_SURF_Y, Z_BACK]}>
+        {/* rear panel (the AUGEN AUF! tier) */}
         <mesh position={[0, 0, REAR_LEN / 2]}>
           <boxGeometry args={[TIER_W, STEP_T, REAR_LEN]} />
           <meshStandardMaterial map={feather} roughness={0.72} toneMapped={false} />
         </mesh>
-        {/* AUGEN AUF! artwork on the flap's outward (-Y) face */}
+        {/* AUGEN AUF! artwork on the rear panel's outward (-Y) face */}
         <mesh position={[0, -STEP_T / 2 - 0.004, REAR_LEN / 2]} rotation={[Math.PI / 2, 0, 0]}>
           <planeGeometry args={[TIER_W * 0.92, REAR_LEN * 0.82]} />
           <meshBasicMaterial map={flapTex} toneMapped={false} />
         </mesh>
+        {/* raised front block — same rigid piece, re-expressed in flap-local */}
+        <mesh position={[0, FRONT_LOCAL_Y, FRONT_LOCAL_Z]}>
+          <boxGeometry args={[TIER_W, FRONT_H, FRONT_LEN]} />
+          <meshStandardMaterial map={feather} roughness={0.72} toneMapped={false} />
+        </mesh>
+
         {/* ---- GREEN LATCH: a long FLAT fabric ribbon (flat strips, no loop).
-            Anchored at the flap's leading (front) edge; lives inside flapRef so
-            it is rigidly locked to the panel. Three flat segments: (1) lies on
-            top of the AUGEN AUF! face, (2) wraps over the front vertical edge,
-            (3) a grab-tab hanging past the edge. As the rigid flap swings up on
-            its rear hinge, the whole ribbon rides up to vertical; the tab also
-            tilts from a floor-ward droop (closed) to taut (open). ---- */}
-        <group position={[0, -STEP_T / 2, REAR_LEN]}>
-          {/* (1) strip lying flat on the panel top, running back from the edge */}
+            Anchored at the lid's leading (front) edge — the front block's front
+            face, which becomes the TOP when the lid stands up. Lives inside the
+            rigid group, so it rides up to vertical as one. Three flat segments:
+            (1) lies flat on the lid top, (2) wraps over the front vertical edge,
+            (3) a grab-tab hanging past it that tilts from a floor-ward droop
+            (closed) to taut in the hand (open). ---- */}
+        <group position={[0, FRONT_TOP_Y, LATCH_Z]}>
+          {/* (1) strip lying flat on the lid top, running back from the edge */}
           <mesh position={[0, -RIB_T / 2 - 0.002, -RIB_TOP_LEN / 2]}>
             <boxGeometry args={[RIB_W, RIB_T, RIB_TOP_LEN]} />
             <meshStandardMaterial color={GREEN} roughness={0.85} metalness={0} toneMapped={false} />
           </mesh>
-          {/* (2) short wrap capping the front vertical edge of the panel */}
-          <mesh position={[0, STEP_T / 2, RIB_T / 2 + 0.002]}>
-            <boxGeometry args={[RIB_W, STEP_T + RIB_T, RIB_T]} />
+          {/* (2) wrap capping the front vertical face of the block */}
+          <mesh position={[0, FRONT_H / 2, RIB_T / 2 + 0.002]}>
+            <boxGeometry args={[RIB_W, FRONT_H + RIB_T, RIB_T]} />
             <meshStandardMaterial color={GREEN} roughness={0.85} metalness={0} toneMapped={false} />
           </mesh>
           {/* (3) grab-tab past the edge — pivots at the bottom of the wrap */}
-          <group ref={tabRef} position={[0, STEP_T, RIB_T + 0.002]} rotation={[TAB_DROOP, 0, 0]}>
+          <group ref={tabRef} position={[0, FRONT_H, RIB_T + 0.002]} rotation={[TAB_DROOP, 0, 0]}>
             <mesh position={[0, 0, RIB_TAB_LEN / 2]}>
               <boxGeometry args={[RIB_W, RIB_T, RIB_TAB_LEN]} />
               <meshStandardMaterial color={GREEN} roughness={0.85} metalness={0} toneMapped={false} />
