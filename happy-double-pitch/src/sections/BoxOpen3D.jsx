@@ -104,6 +104,19 @@ const FLAP_CLOSED = 0; // rear flap lies flat, sealing the dice
 const FLAP_STAND = Math.PI / 2; // rear flap hinged fully vertical (90°)
 const FLAP_OPEN = [0.45, 0.6]; // scroll window over which it hinges open
 
+// ---- Green latch: a long FLAT fabric ribbon (not a loop) -------------------
+// It lies flat on top of the AUGEN AUF! panel, wraps over the panel's leading
+// (front) edge, and hangs past it as a finger grab-tab. Parented inside the
+// flap group, so it is rigidly locked to the panel: when the flap swings up on
+// its rear hinge the whole ribbon rides up and the tab stands vertical (as if
+// held in the hand). Only the free tab gets an extra tilt as it "pulls taut".
+const RIB_W = 0.2; // ribbon strip width
+const RIB_T = 0.02; // ribbon strip thickness (thin, flat)
+const RIB_TOP_LEN = REAR_LEN * 0.72; // length lying flat on the panel top
+const RIB_TAB_LEN = 0.5; // grab-tab length past the leading edge
+const TAB_DROOP = 1.15; // closed: tab bends down over the edge toward the floor
+const TAB_PULL = -0.15; // open: tab pulls up/forward, taut in the hand
+
 const INNER_W = W - WALL * 2;
 const INNER_H = H - WALL * 2;
 const FIT = 0.03;
@@ -738,6 +751,7 @@ function DiceSlot({ position }) {
  *  - Scroll drives lift → right → flip → settle, then the rear flap opens. */
 function Lid({ lidRef, progress, texture, flapTex, feather, infoTex }) {
   const flapRef = useRef();
+  const tabRef = useRef();
   useFrame(() => {
     const lid = lidRef.current;
     if (!lid) return;
@@ -747,9 +761,11 @@ function Lid({ lidRef, progress, texture, flapTex, feather, infoTex }) {
     lid.position.z = track(p, [[0, 0], [0.36, LID_REST.z]]);
     lid.rotation.x = track(p, [[0, 0], [0.16, 0], [0.4, Math.PI]]); // flip interior up
     // Rear flap: hinge from flat to fully vertical across the FLAP_OPEN window.
-    // Only this back-60% panel moves; the raised front block stays put.
+    // The flap is ONE rigid box on a single rear X-hinge — it never bends.
     const t = easeInOut(phase(p, FLAP_OPEN[0], FLAP_OPEN[1]));
     if (flapRef.current) flapRef.current.rotation.x = MathUtils.lerp(FLAP_CLOSED, FLAP_STAND, t);
+    // Ribbon grab-tab: rides up rigidly with the flap, plus pulls taut as it lifts.
+    if (tabRef.current) tabRef.current.rotation.x = MathUtils.lerp(TAB_DROOP, TAB_PULL, t);
   });
 
   return (
@@ -818,24 +834,31 @@ function Lid({ lidRef, progress, texture, flapTex, feather, infoTex }) {
           <planeGeometry args={[TIER_W * 0.92, REAR_LEN * 0.82]} />
           <meshBasicMaterial map={flapTex} toneMapped={false} />
         </mesh>
-        {/* ---- GREEN LATCH: a small lime-green fabric pull-loop fixed to the
-            flap's leading (center-front) edge. Because it lives INSIDE flapRef,
-            its position/rotation are locked to the leading-edge matrix — when
-            the flap hinges up it lifts off the tray floor and arcs backward
-            toward the rear wall, tucking against it at full open. It is a real
-            3D loop (torus + strap), not a flat plane, ~1.5cm in scale. Tilted
-            slightly forward/up so it reads as a finger pull-tab when closed. */}
-        <group position={[0, -STEP_T / 2, REAR_LEN]} rotation={[-0.35, 0, 0]}>
-          {/* short strap anchoring the loop to the flap lip */}
-          <mesh position={[0, -0.05, 0]}>
-            <boxGeometry args={[0.14, 0.11, 0.028]} />
+        {/* ---- GREEN LATCH: a long FLAT fabric ribbon (flat strips, no loop).
+            Anchored at the flap's leading (front) edge; lives inside flapRef so
+            it is rigidly locked to the panel. Three flat segments: (1) lies on
+            top of the AUGEN AUF! face, (2) wraps over the front vertical edge,
+            (3) a grab-tab hanging past the edge. As the rigid flap swings up on
+            its rear hinge, the whole ribbon rides up to vertical; the tab also
+            tilts from a floor-ward droop (closed) to taut (open). ---- */}
+        <group position={[0, -STEP_T / 2, REAR_LEN]}>
+          {/* (1) strip lying flat on the panel top, running back from the edge */}
+          <mesh position={[0, -RIB_T / 2 - 0.002, -RIB_TOP_LEN / 2]}>
+            <boxGeometry args={[RIB_W, RIB_T, RIB_TOP_LEN]} />
             <meshStandardMaterial color={GREEN} roughness={0.85} metalness={0} toneMapped={false} />
           </mesh>
-          {/* the flexible loop — arch standing off the lip (hole axis along X) */}
-          <mesh position={[0, -0.17, 0]} rotation={[0, Math.PI / 2, 0]}>
-            <torusGeometry args={[0.1, 0.022, 16, 40]} />
+          {/* (2) short wrap capping the front vertical edge of the panel */}
+          <mesh position={[0, STEP_T / 2, RIB_T / 2 + 0.002]}>
+            <boxGeometry args={[RIB_W, STEP_T + RIB_T, RIB_T]} />
             <meshStandardMaterial color={GREEN} roughness={0.85} metalness={0} toneMapped={false} />
           </mesh>
+          {/* (3) grab-tab past the edge — pivots at the bottom of the wrap */}
+          <group ref={tabRef} position={[0, STEP_T, RIB_T + 0.002]} rotation={[TAB_DROOP, 0, 0]}>
+            <mesh position={[0, 0, RIB_TAB_LEN / 2]}>
+              <boxGeometry args={[RIB_W, RIB_T, RIB_TAB_LEN]} />
+              <meshStandardMaterial color={GREEN} roughness={0.85} metalness={0} toneMapped={false} />
+            </mesh>
+          </group>
         </group>
       </group>
     </group>
