@@ -806,8 +806,8 @@ function Lid({ lidRef, progress, texture, flapTex, feather, infoTex }) {
 
       {/* ---- REAR TIER: recessed flap (back 60%). Hinges about the BACK rim
           (its pivot group sits at Z_BACK) and lifts to vertical, uncovering
-          the dice. AUGEN AUF! art rides on its outward (-Y) face; the ribbon
-          tab sits at the back rim. ---- */}
+          the dice. AUGEN AUF! art rides on its outward (-Y) face; the green
+          latch loop is fixed to its leading (front) edge. ---- */}
       <group ref={flapRef} position={[0, REAR_SURF_Y, Z_BACK]}>
         <mesh position={[0, 0, REAR_LEN / 2]}>
           <boxGeometry args={[TIER_W, STEP_T, REAR_LEN]} />
@@ -818,11 +818,25 @@ function Lid({ lidRef, progress, texture, flapTex, feather, infoTex }) {
           <planeGeometry args={[TIER_W * 0.92, REAR_LEN * 0.82]} />
           <meshBasicMaterial map={flapTex} toneMapped={false} />
         </mesh>
-        {/* lime-green ribbon pull-tab at the back rim (rides up with the flap) */}
-        <mesh position={[0, -STEP_T / 2 - 0.05, 0.05]} rotation={[0.5, 0, 0]}>
-          <boxGeometry args={[0.24, 0.18, 0.04]} />
-          <meshStandardMaterial color={GREEN} roughness={0.5} toneMapped={false} />
-        </mesh>
+        {/* ---- GREEN LATCH: a small lime-green fabric pull-loop fixed to the
+            flap's leading (center-front) edge. Because it lives INSIDE flapRef,
+            its position/rotation are locked to the leading-edge matrix — when
+            the flap hinges up it lifts off the tray floor and arcs backward
+            toward the rear wall, tucking against it at full open. It is a real
+            3D loop (torus + strap), not a flat plane, ~1.5cm in scale. Tilted
+            slightly forward/up so it reads as a finger pull-tab when closed. */}
+        <group position={[0, -STEP_T / 2, REAR_LEN]} rotation={[-0.35, 0, 0]}>
+          {/* short strap anchoring the loop to the flap lip */}
+          <mesh position={[0, -0.05, 0]}>
+            <boxGeometry args={[0.14, 0.11, 0.028]} />
+            <meshStandardMaterial color={GREEN} roughness={0.85} metalness={0} toneMapped={false} />
+          </mesh>
+          {/* the flexible loop — arch standing off the lip (hole axis along X) */}
+          <mesh position={[0, -0.17, 0]} rotation={[0, Math.PI / 2, 0]}>
+            <torusGeometry args={[0.1, 0.022, 16, 40]} />
+            <meshStandardMaterial color={GREEN} roughness={0.85} metalness={0} toneMapped={false} />
+          </mesh>
+        </group>
       </group>
     </group>
   );
