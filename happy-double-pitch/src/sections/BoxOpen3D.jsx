@@ -64,8 +64,20 @@ const W = 2.6;
 const H = 3.6;
 const WALL = 0.07;
 const WALL_H = 0.5; // inner wall height
-const LID_D = 0.42; // lid thickness
 const FLOOR_T = 0.06; // floor slab thickness
+
+// ---- Hollow lid cavity (real depth; not a solid block) --------------------
+const LID_DEPTH = 0.42; // interior cavity depth
+const LID_WALL = 0.06; // rim wall thickness
+const LID_TOP = 0.05; // top plate thickness (owl art)
+const LID_TOTAL = LID_DEPTH + LID_TOP; // total lid thickness (pivot uses this)
+// Local y within the lid group (opening faces -Y when closed):
+const CAV_CEIL = LID_DEPTH / 2; // interior ceiling
+const CAV_OPEN = -LID_DEPTH / 2; // opening rim
+const TRAY_FLOOR_Y = CAV_CEIL - 0.05; // black inner-tray floor, recessed near ceiling
+const DIE_Y = CAV_CEIL - 0.09; // dice recessed into the circular slots
+const SEG_Y = CAV_OPEN + 0.06; // stepped pink lid segments sit near the opening rim
+const SLOT_R = 0.32; // circular dice-slot radius
 
 const INNER_W = W - WALL * 2;
 const INNER_H = H - WALL * 2;
@@ -80,7 +92,7 @@ const CARD_Z = INNER_H * 0.22; // deck offset into the +Z half of the tray
 const DIE_R = 0.24;
 
 // Lid keyframes (closed → lifted → right → flipped, then settle).
-const LID_CLOSED_Y = WALL_H + LID_D / 2 + 0.02;
+const LID_CLOSED_Y = WALL_H + LID_TOTAL / 2 + 0.02;
 const LID_REST = { x: 2.9, y: 0.7, z: 0 };
 
 // Content park spots (left, stacked, lying flat). rot -90°X = artwork faces UP
@@ -88,30 +100,34 @@ const LID_REST = { x: 2.9, y: 0.7, z: 0 };
 const PAD_PARK = { pos: [-2.9, 0.32, 0], rot: [-Math.PI / 2, 0, 0] };
 const CARD_PARK = { pos: [-2.9, 0.58, 0], rot: [-Math.PI / 2, 0, 0] };
 
-// The two dice live in eye-cups on the lid interior (lid-local coordinates).
-const EYE_SOCKET_Z = -0.5; // toward the far/top end of the interior
-const EYE_CUP_L = new Vector3(-0.52, -(LID_D / 2 + DIE_R * 0.45), EYE_SOCKET_Z);
-const EYE_CUP_R = new Vector3(0.52, -(LID_D / 2 + DIE_R * 0.45), EYE_SOCKET_Z);
+// Dice housing: a black inner tray in the -Z (back) half, two circular slots
+// split by a centre partition; the dice rest in the slots (lid-local coords).
+const DICE_Z = -0.65; // centre of the dice / back half
+const EYE_CUP_L = new Vector3(-0.54, DIE_Y, DICE_Z);
+const EYE_CUP_R = new Vector3(0.54, DIE_Y, DICE_Z);
 
-// OPEN EYES flap: hinged at its TOP edge (+Z) so it swings UP to reveal the eye
-// sockets below it. Tunables.
-const FLAP_Y = -LID_D / 2 - 0.014; // just under the interior surface
-const FLAP_HINGE_Z = 0.25; // hinge line (top edge of the flap)
-const FLAP_LEN = 1.55; // extends toward -Z, covering both eye sockets
+// Stepped pink lid. Front (+Z) = flush lower level + a raised block (Segment A);
+// a short ramp (Segment B); back (-Z) = the AUGEN AUF! flap (Segment C) covering
+// the dice, hinged at the middle so it flips 90° UP (vertical) to reveal them.
+const HINGE_Z = -0.12; // Segment C hinge line (middle/back)
+const FLAP_LEN = 1.42; // Segment C covers -Z from the hinge over the dice
+const FRONT_Z0 = HINGE_Z + 0.02; // front stepped section starts here (+Z side)
+const FRONT_LEN = H * 0.88 / 2 + HINGE_Z - 0.02; // fills the rest to the +Z end
 
 // Stage timings.
 const RELEASE = 0.62; // dice hand off to physics here
 const CONTENT_OUT = [0.15, 0.5];
-const FLAP_KEYS = [[0, 0], [0.45, 0], [0.6, 2.0]]; // flap open angle (rad)
+const FLAP_KEYS = [[0, 0], [0.45, 0], [0.62, Math.PI / 2]]; // 0 → 90° (flip vertical)
 
-// Dice launch: high apex clears the (invisible) rim fence; targets sit inside
-// the felt so both dice land in the DICE-ZONE.
-const LAUNCH_VY = 5.6;
+// Dice launch: a HIGH apex so each die clears the rim fence with margin (its
+// underside must pass above the fence top when crossing the wall), then drops
+// onto its target inside the felt DICE-ZONE.
+const LAUNCH_VY = 7.4;
 const DIE_TARGET_L = [-0.35, 0.18, 0.28];
 const DIE_TARGET_R = [0.4, 0.18, -0.26];
-// Invisible physics fence: much taller than the visible walls so a die can never
-// bounce out of the tray once it has dropped in.
-const FENCE_H = 1.8;
+// Invisible physics fence around the inner rim — tall enough to contain bounces,
+// but comfortably below the entry arc so it never deflects an incoming die.
+const FENCE_H = 1.4;
 
 const phase = (p, a, b) => MathUtils.clamp((p - a) / (b - a), 0, 1);
 const easeOut = (t) => 1 - Math.pow(1 - t, 3);
@@ -261,33 +277,29 @@ function makeWallLabel() {
   return t;
 }
 
-// "OPEN EYES!" inner flap graphic — pink feather ground, white speech pill.
+// "AUGEN AUF!" flap graphic — pink feather ground with bold white lettering.
 function makeFlapTexture() {
-  const cw = 1024, ch = 720;
+  const cw = 1024, ch = 620;
   const c = document.createElement('canvas');
   c.width = cw;
   c.height = ch;
   const ctx = c.getContext('2d');
   ctx.fillStyle = INSERT_PINK;
   ctx.fillRect(0, 0, cw, ch);
-  // subtle feather speckle
-  ctx.fillStyle = 'rgba(0,0,0,0.10)';
-  for (let i = 0; i < 240; i++) {
-    const x = Math.random() * cw, y = Math.random() * ch, r = 6 + Math.random() * 8;
-    ctx.beginPath();
-    ctx.ellipse(x, y, r, r * 0.4, Math.random() * Math.PI, 0, Math.PI * 2);
-    ctx.fill();
+  // scattered dark feathers
+  for (let i = 0; i < 60; i++) {
+    drawFeather(ctx, Math.random() * cw, Math.random() * ch, 18 + Math.random() * 28, Math.random() * Math.PI, 'rgba(15,0,10,0.24)');
   }
-  // white pill with the callout
-  ctx.fillStyle = '#f7f7f7';
-  ctx.beginPath();
-  ctx.roundRect(cw * 0.16, ch * 0.36, cw * 0.68, ch * 0.28, 90);
-  ctx.fill();
-  ctx.fillStyle = '#141414';
-  ctx.font = '900 120px Arial, sans-serif';
+  // bold white "AUGEN AUF!"
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '900 150px Arial, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('OPEN EYES!', cw / 2, ch * 0.5);
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 14;
+  ctx.strokeStyle = 'rgba(10,0,6,0.5)';
+  ctx.strokeText('AUGEN AUF!', cw / 2, ch * 0.5);
+  ctx.fillText('AUGEN AUF!', cw / 2, ch * 0.5);
   const t = new CanvasTexture(c);
   t.colorSpace = SRGBColorSpace;
   t.anisotropy = 4;
@@ -339,7 +351,7 @@ function makeWarningDecal() {
   ctx.roundRect(20, 46, cw - 40, ch - 92, (ch - 92) / 2);
   ctx.fill();
   ctx.textBaseline = 'middle';
-  ctx.font = `900 ${Math.floor(ch * 0.34)}px Arial, sans-serif`;
+  ctx.font = `900 ${Math.floor(ch * 0.3)}px Arial, sans-serif`;
   const a = 'WARNING! ';
   const b = 'DOUBLE TROUBLE!';
   const wa = ctx.measureText(a).width;
@@ -382,8 +394,9 @@ function makeTitleDecal() {
 
 // Lid bottom-edge info panel (transparent ground over the black lid edge):
 // left = HAPPY DOUBLE / NO RISK, NO RUN!  ·  right = 8–99 · 20 Min. · 2+ Players.
+const LID_INFO_ASPECT = 1900 / 240;
 function makeLidInfoDecal() {
-  const cw = 1600, ch = 240;
+  const cw = 1900, ch = 240;
   const c = document.createElement('canvas');
   c.width = cw;
   c.height = ch;
@@ -403,9 +416,9 @@ function makeLidInfoDecal() {
     { icon: 'time', label: '20 Min.' },
     { icon: 'players', label: '2+ Players' },
   ];
-  const rx0 = cw * 0.52;
-  const colW = (cw - rx0 - 40) / specs.length;
-  ctx.font = `800 ${Math.floor(ch * 0.24)}px Arial, sans-serif`;
+  const rx0 = cw * 0.42;
+  const colW = (cw - rx0 - 60) / specs.length;
+  ctx.font = `800 ${Math.floor(ch * 0.2)}px Arial, sans-serif`;
   ctx.textAlign = 'center';
   specs.forEach((s, i) => {
     const cx = rx0 + colW * i + colW / 2;
@@ -677,30 +690,35 @@ function CameraRig({ progress }) {
   return null;
 }
 
-/* An owl-eye socket on the lid interior, styled to mirror the front-cover eye
- * (pink eyelid ring → green iris ring → dark socket the die nestles into). */
-function EyeSocket({ position }) {
+/* A circular dice slot in the black inner tray: a dark recessed cup the die
+ * nestles into (the real box has two, split by a centre partition). */
+function DiceSlot({ position }) {
   return (
-    <group position={position} rotation={[Math.PI / 2, 0, 0]}>
-      <mesh position={[0, 0, 0]}>
-        <circleGeometry args={[0.33, 40]} />
-        <meshStandardMaterial color="#0a0a0a" roughness={0.6} />
+    <group position={position}>
+      {/* cup wall (open cylinder) */}
+      <mesh position={[0, 0.06, 0]}>
+        <cylinderGeometry args={[SLOT_R, SLOT_R * 0.92, 0.16, 40, 1, true]} />
+        <meshStandardMaterial color="#0a0a0a" roughness={0.7} metalness={0.1} side={2} />
       </mesh>
-      <mesh position={[0, 0, 0.002]}>
-        <ringGeometry args={[0.3, 0.37, 40]} />
-        <meshStandardMaterial color={GREEN} roughness={0.5} toneMapped={false} />
-      </mesh>
-      <mesh position={[0, 0, 0.004]}>
-        <ringGeometry args={[0.37, 0.46, 40]} />
-        <meshStandardMaterial color={PINK} roughness={0.5} toneMapped={false} />
+      {/* cup floor */}
+      <mesh position={[0, 0.14, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[SLOT_R * 0.92, 40]} />
+        <meshStandardMaterial color="#060606" roughness={0.8} />
       </mesh>
     </group>
   );
 }
 
-/* The LID: a slab with the owl art on top and the OPEN EYES flap underneath.
- * Driven by scroll: lift → right → flip → settle; then the flap pivots open. */
-function Lid({ lidRef, progress, texture, flapTex }) {
+/* The LID: a hollow flip-top box that mirrors the physical stepped mechanism.
+ *  - Top plate (owl art) + thick rim walls form the cavity.
+ *  - A BLACK INNER TRAY in the -Z half holds two dice in circular slots, split
+ *    by a centre partition.
+ *  - A CONTINUOUS STEPPED PINK LID covers it: Segment A (front flush level +
+ *    raised block), Segment B (ramp), Segment C (the AUGEN AUF! flap over the
+ *    dice, with a lime-green ribbon at its back edge).
+ *  - Scroll drives lift → right → flip → settle, then Segment C flips 90° UP
+ *    (ribbon pull) to reveal the dice for the roll. */
+function Lid({ lidRef, progress, texture, flapTex, infoTex }) {
   const flapRef = useRef();
   useFrame(() => {
     const lid = lidRef.current;
@@ -710,36 +728,85 @@ function Lid({ lidRef, progress, texture, flapTex }) {
     lid.position.y = track(p, [[0, LID_CLOSED_Y], [0.15, LID_CLOSED_Y + 2.2], [0.42, LID_REST.y]]);
     lid.position.z = track(p, [[0, 0], [0.36, LID_REST.z]]);
     lid.rotation.x = track(p, [[0, 0], [0.16, 0], [0.4, Math.PI]]); // flip interior up
-    // Flap swings UP about its top-edge hinge (negative local X lifts the free
-    // -Z edge toward the interior normal, which points up after the lid flips).
+    // Segment C flips 90° UP about its hinge: negative rotation lifts the free
+    // -Z edge (with the ribbon) toward -Y local = up once the lid is flipped.
     if (flapRef.current) flapRef.current.rotation.x = -track(p, FLAP_KEYS);
   });
 
+  const OW = W + 0.05, OH = H + 0.05; // lid outer footprint
+  const frontZc = FRONT_Z0 + FRONT_LEN / 2; // centre of the front stepped section
+
   return (
     <group ref={lidRef} position={[0, LID_CLOSED_Y, 0]}>
-      {/* lid slab: owl art on +Y (top), pink interior on -Y */}
-      <mesh>
-        <boxGeometry args={[W + 0.05, LID_D, H + 0.05]} />
+      {/* ---- TOP PLATE (owl art on +Y, black ceiling on -Y) ---- */}
+      <mesh position={[0, CAV_CEIL + LID_TOP / 2, 0]}>
+        <boxGeometry args={[OW, LID_TOP, OH]} />
         <meshStandardMaterial color="#0a0a0a" roughness={0.6} />
       </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, LID_D / 2 + 0.006, 0]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, CAV_CEIL + LID_TOP + 0.006, 0]}>
         <planeGeometry args={[W * 0.98, H * 0.98]} />
         <meshStandardMaterial map={texture} roughness={0.5} toneMapped={false} />
       </mesh>
-      {/* interior surface (pink) */}
-      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, -LID_D / 2 - 0.006, 0]}>
-        <planeGeometry args={[W * 0.94, H * 0.94]} />
-        <meshStandardMaterial color={INSERT_PINK} roughness={0.7} />
+
+      {/* ---- RIM WALLS (thick sides forming the cavity) ---- */}
+      {[
+        { pos: [OW / 2 - LID_WALL / 2, 0, 0], args: [LID_WALL, LID_DEPTH, OH] },
+        { pos: [-OW / 2 + LID_WALL / 2, 0, 0], args: [LID_WALL, LID_DEPTH, OH] },
+        { pos: [0, 0, OH / 2 - LID_WALL / 2], args: [OW, LID_DEPTH, LID_WALL] },
+        { pos: [0, 0, -OH / 2 + LID_WALL / 2], args: [OW, LID_DEPTH, LID_WALL] },
+      ].map((w, i) => (
+        <mesh key={i} position={w.pos}>
+          <boxGeometry args={w.args} />
+          <meshStandardMaterial color="#0a0a0a" roughness={0.6} />
+        </mesh>
+      ))}
+
+      {/* info panel on the bottom short edge (+Z end, by the owl's shoes) */}
+      <mesh position={[0, CAV_CEIL + LID_TOP / 2, OH / 2 + 0.006]}>
+        <planeGeometry args={[OW * 0.92, OW * 0.92 / LID_INFO_ASPECT]} />
+        <meshStandardMaterial map={infoTex} transparent roughness={0.6} toneMapped={false} />
       </mesh>
-      {/* owl-eye sockets on the interior (mirror the front-cover eyes) */}
-      <EyeSocket position={[EYE_CUP_L.x, -LID_D / 2 - 0.01, EYE_SOCKET_Z]} />
-      <EyeSocket position={[EYE_CUP_R.x, -LID_D / 2 - 0.01, EYE_SOCKET_Z]} />
-      {/* OPEN EYES flap — hinged at its TOP (+Z) edge, extends -Z over the eyes,
-          swings up to reveal them */}
-      <group ref={flapRef} position={[0, FLAP_Y, FLAP_HINGE_Z]}>
-        <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, -FLAP_LEN / 2]}>
-          <planeGeometry args={[W * 0.9, FLAP_LEN]} />
-          <meshStandardMaterial map={flapTex} roughness={0.7} side={2} toneMapped={false} />
+
+      {/* ---- BLACK INNER TRAY (dice housing, -Z half) ---- */}
+      <mesh position={[0, TRAY_FLOOR_Y + 0.015, DICE_Z]}>
+        <boxGeometry args={[W * 0.9, 0.03, FLAP_LEN + 0.2]} />
+        <meshStandardMaterial color="#0b0b0b" roughness={0.72} />
+      </mesh>
+      {/* centre partition between the two slots */}
+      <mesh position={[0, TRAY_FLOOR_Y - 0.05, DICE_Z]}>
+        <boxGeometry args={[0.05, 0.14, FLAP_LEN * 0.7]} />
+        <meshStandardMaterial color="#0a0a0a" roughness={0.72} />
+      </mesh>
+      <DiceSlot position={[EYE_CUP_L.x, TRAY_FLOOR_Y, DICE_Z]} />
+      <DiceSlot position={[EYE_CUP_R.x, TRAY_FLOOR_Y, DICE_Z]} />
+
+      {/* ---- STEPPED PINK LID ---- */}
+      {/* Segment A: flush lower level over the front (+Z) half */}
+      <mesh position={[0, SEG_Y, frontZc]}>
+        <boxGeometry args={[W * 0.9, 0.03, FRONT_LEN]} />
+        <meshStandardMaterial map={flapTex} roughness={0.7} toneMapped={false} />
+      </mesh>
+      {/* Segment A's raised block, flush with the rim */}
+      <mesh position={[0, SEG_Y - 0.09, frontZc]}>
+        <boxGeometry args={[W * 0.78, 0.16, FRONT_LEN * 0.72]} />
+        <meshStandardMaterial map={flapTex} roughness={0.7} toneMapped={false} />
+      </mesh>
+      {/* Segment B: short ramp linking the front level up to Segment C's hinge */}
+      <mesh position={[0, SEG_Y + 0.03, HINGE_Z - 0.03]} rotation={[0.7, 0, 0]}>
+        <boxGeometry args={[W * 0.9, 0.03, 0.16]} />
+        <meshStandardMaterial map={flapTex} roughness={0.7} toneMapped={false} />
+      </mesh>
+
+      {/* Segment C: the AUGEN AUF! flap over the dice, hinged at its +Z edge */}
+      <group ref={flapRef} position={[0, SEG_Y + 0.06, HINGE_Z]}>
+        <mesh position={[0, 0, -FLAP_LEN / 2]}>
+          <boxGeometry args={[W * 0.88, 0.03, FLAP_LEN]} />
+          <meshStandardMaterial map={flapTex} roughness={0.7} toneMapped={false} />
+        </mesh>
+        {/* lime-green pull ribbon looping out from the flap's back (-Z) edge */}
+        <mesh position={[0, 0.05, -FLAP_LEN - 0.04]}>
+          <boxGeometry args={[0.18, 0.14, 0.05]} />
+          <meshStandardMaterial color={GREEN} roughness={0.5} toneMapped={false} />
         </mesh>
       </group>
     </group>
@@ -753,7 +820,14 @@ function Scene({ progress }) {
   texture.colorSpace = SRGBColorSpace;
   const flapTex = useMemo(makeFlapTexture, []);
   const panels = useMemo(
-    () => ({ felt: makeFeltTexture(), wallLabel: makeWallLabel() }),
+    () => ({
+      felt: makeFeltTexture(),
+      wallLabel: makeWallLabel(),
+      feather: makeFeatherPink(),
+      warning: makeWarningDecal(),
+      title: makeTitleDecal(),
+      lidInfo: makeLidInfoDecal(),
+    }),
     []
   );
 
@@ -784,7 +858,7 @@ function Scene({ progress }) {
       <pointLight position={[5, 2, 3]} intensity={20} color={GREEN} distance={16} />
 
       <CameraRig progress={progress} />
-      <Lid lidRef={lidRef} progress={progress} texture={texture} flapTex={flapTex} />
+      <Lid lidRef={lidRef} progress={progress} texture={texture} flapTex={flapTex} infoTex={panels.lidInfo} />
 
       {/* Contents that fly out to the left */}
       <FlyOutItem
@@ -837,27 +911,39 @@ function Scene({ progress }) {
           <planeGeometry args={[feltW, feltH]} />
           <meshStandardMaterial map={panels.felt} color={FELT_GREEN} roughness={1} metalness={0} />
         </mesh>
-        {/* walls (inner pink, outer black) */}
+        {/* walls — pink feather inside AND out, like the physical tray */}
         {[
-          { pos: [INNER_W / 2 + WALL / 2, WALL_H / 2, 0], args: [WALL, WALL_H, H], inner: 'material-1' },
-          { pos: [-INNER_W / 2 - WALL / 2, WALL_H / 2, 0], args: [WALL, WALL_H, H], inner: 'material-0' },
-          { pos: [0, WALL_H / 2, INNER_H / 2 + WALL / 2], args: [W, WALL_H, WALL], inner: 'material-5' },
-          { pos: [0, WALL_H / 2, -INNER_H / 2 - WALL / 2], args: [W, WALL_H, WALL], inner: 'material-4' },
+          { pos: [INNER_W / 2 + WALL / 2, WALL_H / 2, 0], args: [WALL, WALL_H, H] },
+          { pos: [-INNER_W / 2 - WALL / 2, WALL_H / 2, 0], args: [WALL, WALL_H, H] },
+          { pos: [0, WALL_H / 2, INNER_H / 2 + WALL / 2], args: [W, WALL_H, WALL] },
+          { pos: [0, WALL_H / 2, -INNER_H / 2 - WALL / 2], args: [W, WALL_H, WALL] },
         ].map((w, i) => (
           <mesh key={i} position={w.pos}>
             <boxGeometry args={w.args} />
-            {['material-0', 'material-1', 'material-2', 'material-3', 'material-4', 'material-5'].map((m) => (
-              <meshStandardMaterial key={m} attach={m} color={m === w.inner ? INSERT_PINK : '#0c0c0c'} roughness={0.68} />
-            ))}
+            <meshStandardMaterial map={panels.feather} roughness={0.7} metalness={0} />
           </mesh>
         ))}
-        {/* DICE-ZONE labels */}
+        {/* DICE-ZONE labels (inner walls) */}
         {walls.map((w) => (
           <mesh key={w.key} position={w.position} quaternion={w.quaternion}>
             <planeGeometry args={[LW, LH]} />
             <meshStandardMaterial map={panels.wallLabel} transparent roughness={0.85} metalness={0} />
           </mesh>
         ))}
+        {/* OUTER-wall graphics: WARNING on the front (+Z, camera-facing) wall,
+            HAPPY DOUBLE on the two long side walls (±X). */}
+        <mesh position={[0, WALL_H / 2, INNER_H / 2 + WALL + 0.006]}>
+          <planeGeometry args={[W * 0.82, W * 0.82 / (1100 / 220)]} />
+          <meshStandardMaterial map={panels.warning} transparent roughness={0.8} metalness={0} />
+        </mesh>
+        <mesh position={[-INNER_W / 2 - WALL - 0.006, WALL_H / 2, 0]} rotation={[0, -Math.PI / 2, 0]}>
+          <planeGeometry args={[H * 0.7, H * 0.7 / (1536 / 320)]} />
+          <meshStandardMaterial map={panels.title} transparent roughness={0.8} metalness={0} />
+        </mesh>
+        <mesh position={[INNER_W / 2 + WALL + 0.006, WALL_H / 2, 0]} rotation={[0, Math.PI / 2, 0]}>
+          <planeGeometry args={[H * 0.7, H * 0.7 / (1536 / 320)]} />
+          <meshStandardMaterial map={panels.title} transparent roughness={0.8} metalness={0} />
+        </mesh>
         {/* content rest anchors (flat: face up) */}
         <object3D ref={padAnchor} position={[0, PAD_THICK / 2, 0]} rotation={[-Math.PI / 2, 0, 0]} />
         <object3D ref={cardAnchor} position={[0, PAD_THICK + CARD_THICK / 2, CARD_Z]} rotation={[-Math.PI / 2, 0, 0]} />
