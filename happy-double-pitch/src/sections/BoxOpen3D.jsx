@@ -104,7 +104,14 @@ const INS_W = CAV_W - 0.02; // insert width (flush to L/R inner walls)
 // owl's EYES — and therefore the low openable panel + the dice — sit toward local
 // +Z (user-near, the "front"). The elevated STATIC step and the hinge sit toward
 // local -Z (the "back"). The whole insert is ONE rigid piece hinged at the -Z edge.
-const INS_FRONT = OH / 2 - LID_WALL; // free FRONT lip (local +Z, user-near, under the eyes)
+// ASSEMBLY_DZ rigidly shifts the ENTIRE insert — both pink tiers, the green latch,
+// the dice wells AND the physics eye-cups — along the longitudinal axis as one
+// locked unit (it feeds INS_FRONT below, which cascades to every insert coord, and
+// DICE_Z). This is THE single eye-alignment knob: more NEGATIVE = further toward the
+// REAR wall. Dice read too-far-back near ~0.6 and too-far-forward near ~1.05, so the
+// eye-aligned sweet spot is ~0.80.
+const ASSEMBLY_DZ = -0.25;
+const INS_FRONT = (OH / 2 - LID_WALL) + ASSEMBLY_DZ; // free FRONT lip, pulled back off the rim by DZ
 const INS_LEN = OH * 0.62; // insert length (wide black floor gap left at the BACK)
 const INS_BACK = INS_FRONT - INS_LEN; // REAR HINGE edge (toward local -Z)
 const FRONT_LEN = INS_LEN * 0.68; // low openable front panel (AUGEN AUF!) — bigger, front portion
@@ -163,9 +170,7 @@ const CARD_PARK = { pos: [-2.9, 0.58, 0], rot: [-Math.PI / 2, 0, 0] };
 // ±0.52 of the box half-width and ~0.6 forward (local +Z). Dice sit right under
 // them, well within the low openable panel [Z_CREASE..INS_FRONT], so lifting the
 // panel exposes them. DICE_Z is THE tunable: raise toward +1 = more forward.
-const DICE_Z = 1.05; // eye-aligned dice centre (local +Z); pushed forward past the
-// geometric eye z (~0.59) to compensate for the angled-camera parallax between the
-// top cover art and the deeper dice wells. Raise toward the front rim to nudge forward.
+const DICE_Z = 1.05 + ASSEMBLY_DZ; // dice centre, locked to the assembly (moves with ASSEMBLY_DZ)
 const DICE_TRAY_LEN = FRONT_LEN * 0.5; // z-length of the black dice-well plate
 const EYE_CUP_L = new Vector3(-0.52, DIE_Y, DICE_Z);
 const EYE_CUP_R = new Vector3(0.52, DIE_Y, DICE_Z);
