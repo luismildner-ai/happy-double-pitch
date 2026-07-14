@@ -113,7 +113,7 @@ const Z_CREASE = INS_FRONT - FRONT_LEN; // step boundary (front panel ↔ elevat
 const FRONT_C = (INS_FRONT + Z_CREASE) / 2; // low front panel centre z
 const REAR_C = (Z_CREASE + INS_BACK) / 2; // elevated block centre z
 const STEP_T = 0.06; // front low panel board thickness
-const ELEV_H = 0.16; // elevated step height — a clean paperboard step, not a massive block
+const ELEV_H = 0.13; // elevated step height — a sleek, low paperboard tier
 const SEAL_Y = CAV_OPEN + 0.02; // elevated block TOP face (near the rim)
 const LOW_TOP_Y = SEAL_Y + 0.02; // front panel sits a clean ~0.08 step below the block top
 const PINK_W = INS_W; // pink spans the full insert width (flush L/R)
@@ -163,7 +163,9 @@ const CARD_PARK = { pos: [-2.9, 0.58, 0], rot: [-Math.PI / 2, 0, 0] };
 // ±0.52 of the box half-width and ~0.6 forward (local +Z). Dice sit right under
 // them, well within the low openable panel [Z_CREASE..INS_FRONT], so lifting the
 // panel exposes them. DICE_Z is THE tunable: raise toward +1 = more forward.
-const DICE_Z = 0.6; // eye-aligned dice centre (local +Z, under the owl's eyes)
+const DICE_Z = 1.05; // eye-aligned dice centre (local +Z); pushed forward past the
+// geometric eye z (~0.59) to compensate for the angled-camera parallax between the
+// top cover art and the deeper dice wells. Raise toward the front rim to nudge forward.
 const DICE_TRAY_LEN = FRONT_LEN * 0.5; // z-length of the black dice-well plate
 const EYE_CUP_L = new Vector3(-0.52, DIE_Y, DICE_Z);
 const EYE_CUP_R = new Vector3(0.52, DIE_Y, DICE_Z);
