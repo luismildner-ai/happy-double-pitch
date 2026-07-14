@@ -100,22 +100,26 @@ const LID_INSET = LID_WALL + 0.03; // rim-wall margin
 const CAV_W = OW - LID_WALL * 2; // inner cavity width
 const CAV_LEN = OH - LID_WALL * 2; // inner cavity length
 const INS_W = CAV_W - 0.02; // insert width (flush to L/R inner walls)
-const INS_FRONT = -(OH / 2 - LID_WALL); // insert FRONT edge (local -Z, flush, user-near)
-const INS_LEN = OH * 0.62; // insert length (wide black gap behind the hinge)
-const INS_BACK = INS_FRONT + INS_LEN; // insert REAR/HINGE edge (toward local +Z)
-const FRONT_LEN = INS_LEN * 0.5; // low front panel length (AUGEN AUF!)
-const REAR_LEN = INS_LEN * 0.5; // elevated block length (by the hinge)
-const Z_CREASE = INS_FRONT + FRONT_LEN; // step boundary (front panel ↔ elevated block)
+// Orientation (verified against the actual render, not just the flip math): the
+// owl's EYES — and therefore the low openable panel + the dice — sit toward local
+// +Z (user-near, the "front"). The elevated STATIC step and the hinge sit toward
+// local -Z (the "back"). The whole insert is ONE rigid piece hinged at the -Z edge.
+const INS_FRONT = OH / 2 - LID_WALL; // free FRONT lip (local +Z, user-near, under the eyes)
+const INS_LEN = OH * 0.62; // insert length (wide black floor gap left at the BACK)
+const INS_BACK = INS_FRONT - INS_LEN; // REAR HINGE edge (toward local -Z)
+const FRONT_LEN = INS_LEN * 0.68; // low openable front panel (AUGEN AUF!) — bigger, front portion
+const REAR_LEN = INS_LEN * 0.32; // elevated static step (by the hinge) — shorter rear portion
+const Z_CREASE = INS_FRONT - FRONT_LEN; // step boundary (front panel ↔ elevated block)
 const FRONT_C = (INS_FRONT + Z_CREASE) / 2; // low front panel centre z
 const REAR_C = (Z_CREASE + INS_BACK) / 2; // elevated block centre z
 const STEP_T = 0.06; // front low panel board thickness
-const ELEV_H = 0.28; // elevated rear block height (the raised step)
-const SEAL_Y = CAV_OPEN + 0.02; // elevated block TOP face (near the rim, highest)
-const LOW_TOP_Y = SEAL_Y + 0.13; // front panel top (recessed step below the block)
+const ELEV_H = 0.16; // elevated step height — a clean paperboard step, not a massive block
+const SEAL_Y = CAV_OPEN + 0.02; // elevated block TOP face (near the rim)
+const LOW_TOP_Y = SEAL_Y + 0.02; // front panel sits a clean ~0.08 step below the block top
 const PINK_W = INS_W; // pink spans the full insert width (flush L/R)
 const HINGE_Y = SEAL_Y; // rear hinge height (top-back edge, at the rim)
 const FLAP_CLOSED = 0; // whole insert lies flat, sealing the dice
-const FLAP_STAND = -Math.PI * 0.55; // insert swings up & leans back off the rear hinge
+const FLAP_STAND = Math.PI * 0.55; // insert swings UP & back off the rear (-Z) hinge as one piece
 const FLAP_OPEN = [0.45, 0.6]; // scroll window over which it opens
 
 // ---- Green latch: a narrow FLAT fabric ribbon (not a loop) -----------------
@@ -155,10 +159,14 @@ const CARD_PARK = { pos: [-2.9, 0.58, 0], rot: [-Math.PI / 2, 0, 0] };
 // FRONT low panel so they line up beneath the owl's eyes on the closed cover.
 // The unified insert covers them when shut and lifts clear to expose them.
 // DICE_Z is THE tunable for eye alignment; EYE_CUP x is the eye spacing.
-const DICE_Z = INS_FRONT + FRONT_LEN * 0.5; // dice centre (mid front panel, user-forward)
-const DICE_TRAY_LEN = FRONT_LEN * 0.8; // z-length of the black dice-well plate
-const EYE_CUP_L = new Vector3(-0.45, DIE_Y, DICE_Z);
-const EYE_CUP_R = new Vector3(0.45, DIE_Y, DICE_Z);
+// Measured from the cover art (box-front-flat.png): the owl's eyes are centred at
+// ±0.52 of the box half-width and ~0.6 forward (local +Z). Dice sit right under
+// them, well within the low openable panel [Z_CREASE..INS_FRONT], so lifting the
+// panel exposes them. DICE_Z is THE tunable: raise toward +1 = more forward.
+const DICE_Z = 0.6; // eye-aligned dice centre (local +Z, under the owl's eyes)
+const DICE_TRAY_LEN = FRONT_LEN * 0.5; // z-length of the black dice-well plate
+const EYE_CUP_L = new Vector3(-0.52, DIE_Y, DICE_Z);
+const EYE_CUP_R = new Vector3(0.52, DIE_Y, DICE_Z);
 
 // Stage timings.
 const RELEASE = 0.62; // dice hand off to physics here
@@ -829,7 +837,7 @@ function Lid({ lidRef, progress, texture, flapTex, feather, infoTex }) {
       <DiceSlot position={[EYE_CUP_R.x, TRAY_FLOOR_Y, DICE_Z]} />
 
       {/* ---- UNIFIED PINK INSERT (ONE solid moving piece). Rear-hinged at its
-          local +Z edge; pulling the ribbon swings the ENTIRE assembly — elevated
+          local -Z edge; pulling the ribbon swings the ENTIRE assembly — elevated
           block, low panel, AUGEN AUF! label and green ribbon together — up and
           back off the hinge, clearing the deck to expose the dice. The inner
           group cancels the hinge offset so children keep lid-space coords while
@@ -858,13 +866,13 @@ function Lid({ lidRef, progress, texture, flapTex, feather, infoTex }) {
               green on the pink top). Locked into the unified insert, so it swings
               as one with the whole assembly. ---- */}
           <group position={[0, LOW_TOP_Y, INS_FRONT]}>
-            {/* wrap capping the front vertical edge (flush with the board top) */}
-            <mesh position={[0, STEP_T / 2, -RIB_T / 2 - 0.002]}>
+            {/* wrap capping the front (+Z) vertical edge (flush with the board top) */}
+            <mesh position={[0, STEP_T / 2, RIB_T / 2 + 0.002]}>
               <boxGeometry args={[RIB_W, STEP_T, RIB_T]} />
               <meshStandardMaterial color={GREEN} roughness={0.85} metalness={0} toneMapped={false} />
             </mesh>
-            {/* grab-tab hanging DOWN past the edge, drooping slightly outward */}
-            <group position={[0, STEP_T, -RIB_T / 2 - 0.002]} rotation={[-TAB_DROOP, 0, 0]}>
+            {/* grab-tab hanging DOWN past the +Z edge, drooping slightly outward */}
+            <group position={[0, STEP_T, RIB_T / 2 + 0.002]} rotation={[TAB_DROOP, 0, 0]}>
               <mesh position={[0, RIB_TAB_LEN / 2, 0]}>
                 <boxGeometry args={[RIB_W, RIB_TAB_LEN, RIB_T]} />
                 <meshStandardMaterial color={GREEN} roughness={0.85} metalness={0} toneMapped={false} />
