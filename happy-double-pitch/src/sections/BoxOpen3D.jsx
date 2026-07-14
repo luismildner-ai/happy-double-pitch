@@ -100,42 +100,39 @@ const LID_INSET = LID_WALL + 0.03; // rim-wall margin
 const CAV_W = OW - LID_WALL * 2; // inner cavity width
 const CAV_LEN = OH - LID_WALL * 2; // inner cavity length
 const INS_W = CAV_W - 0.02; // insert width (flush to L/R inner walls)
-// Orientation (verified against the actual render, not just the flip math): the
-// owl's EYES — and therefore the low openable panel + the dice — sit toward local
-// +Z (user-near, the "front"). The elevated STATIC step and the hinge sit toward
-// local -Z (the "back"). The whole insert is ONE rigid piece hinged at the -Z edge.
-// ASSEMBLY_DZ rigidly shifts the ENTIRE insert — both pink tiers, the green latch,
-// the dice wells AND the physics eye-cups — along the longitudinal axis as one
-// locked unit (it feeds INS_FRONT below, which cascades to every insert coord, and
-// DICE_Z). This is THE single eye-alignment knob: more NEGATIVE = further toward the
-// REAR wall. Dice read too-far-back near ~0.6 and too-far-forward near ~1.05, so the
-// eye-aligned sweet spot is ~0.80.
-const ASSEMBLY_DZ = -0.25;
-const INS_FRONT = (OH / 2 - LID_WALL) + ASSEMBLY_DZ; // free FRONT lip, pulled back off the rim by DZ
-const INS_LEN = OH * 0.62; // insert length (wide black floor gap left at the BACK)
-const INS_BACK = INS_FRONT - INS_LEN; // REAR HINGE edge (toward local -Z)
-const FRONT_LEN = INS_LEN * 0.68; // low openable front panel (AUGEN AUF!) — bigger, front portion
-const REAR_LEN = INS_LEN * 0.32; // elevated static step (by the hinge) — shorter rear portion
-const Z_CREASE = INS_FRONT - FRONT_LEN; // step boundary (front panel ↔ elevated block)
-const FRONT_C = (INS_FRONT + Z_CREASE) / 2; // low front panel centre z
-const REAR_C = (Z_CREASE + INS_BACK) / 2; // elevated block centre z
-const STEP_T = 0.06; // front low panel board thickness
-const ELEV_H = 0.13; // elevated step height — a sleek, low paperboard tier
-const SEAL_Y = CAV_OPEN + 0.02; // elevated block TOP face (near the rim)
-const LOW_TOP_Y = SEAL_Y + 0.02; // front panel sits a clean ~0.08 step below the block top
+// Orientation — DERIVED FROM THE MESH (not guessed): the owl-art plane uses
+// rotation -90°X, which maps the texture's TOP edge to local -Z, and the info panel
+// by the owl's SHOES sits at +Z (see line ~826). The camera is at +Z looking toward
+// -Z. Therefore:
+//   +Z = viewer-FRONT (near): owl shoes / "DOUBLE" text, the flat AUGEN AUF panel,
+//        the green latch on the front lip.
+//   -Z = viewer-BACK (far):   the owl's EYES, the two dice, the static elevated block.
+// The dice sit at -Z under the eyes. The elevated block is a STATIC rear shelf. ONLY
+// the flat FRONT panel moves — it is hinged at the crease just BEHIND the dice and
+// swings UP & BACK, uncovering the dice wells.
+const INS_FRONT = OH / 2 - LID_WALL; // +Z free FRONT lip (near the rim, viewer side)
+const DICE_Z = -0.58; // dice centre — directly under the owl's eyes (measured ≈ -0.59)
+const HINGE_Z = DICE_Z - 0.2; // crease just BEHIND the dice; the front panel hinges here (-0.78)
+const ELEV_LEN = 0.55; // static elevated rear-shelf z-length (short, by the -Z wall)
+const ELEV_C = HINGE_Z - ELEV_LEN / 2; // elevated block centre, behind the hinge (-1.055)
+const PANEL_LEN = INS_FRONT - HINGE_Z; // flat front panel z-length (crease → front lip)
+const PANEL_C = (INS_FRONT + HINGE_Z) / 2; // flat front panel centre z
+const STEP_T = 0.06; // flat panel board thickness
+const ELEV_H = 0.13; // elevated shelf height — a sleek, low paperboard tier
+const SEAL_Y = CAV_OPEN + 0.02; // elevated block seat height (near the rim)
+const LOW_TOP_Y = SEAL_Y + 0.02; // flat panel sits a clean ~0.08 step below the block top
 const PINK_W = INS_W; // pink spans the full insert width (flush L/R)
-const HINGE_Y = SEAL_Y; // rear hinge height (top-back edge, at the rim)
-const FLAP_CLOSED = 0; // whole insert lies flat, sealing the dice
-const FLAP_STAND = Math.PI * 0.55; // insert swings UP & back off the rear (-Z) hinge as one piece
+const HINGE_Y = LOW_TOP_Y; // hinge at the flat panel's top edge, at the crease
+const FLAP_CLOSED = 0; // panel lies flat, sealing the dice
+const FLAP_STAND = -Math.PI * 0.55; // NEGATIVE: the front lip lifts UP & swings BACK over the hinge
 const FLAP_OPEN = [0.45, 0.6]; // scroll window over which it opens
 
 // ---- Green latch: a narrow FLAT fabric ribbon (not a loop) -----------------
-// Attaches to the FRONT lip (local -Z) of the moving insert: it wraps over the
-// front vertical edge and hangs DOWN past it as a grab-tab. When closed it
-// drapes below the edge — completely hidden from a top-down view (no green on
-// the pink top). It is parented INSIDE the unified insert group, so it is
-// structurally locked to the front lip and swings as one with the whole
-// assembly through the entire opening arc.
+// Attaches to the FRONT lip (local +Z, viewer side) of the moving flat panel: it
+// wraps over the front vertical edge and hangs DOWN past it as a grab-tab. When
+// closed it drapes below the edge — completely hidden from a top-down view (no green
+// on the pink top). It is parented INSIDE the moving front panel, so it is locked to
+// the front lip and swings up & back with it through the entire opening arc.
 const RIB_W = 0.22; // ribbon strip width (narrow fraction of the box)
 const RIB_T = 0.02; // ribbon strip thickness (thin, flat)
 const RIB_TAB_LEN = 0.32; // grab-tab length hanging past the front edge
@@ -162,16 +159,13 @@ const LID_REST = { x: 2.9, y: 0.7, z: 0 };
 const PAD_PARK = { pos: [-2.9, 0.32, 0], rot: [-Math.PI / 2, 0, 0] };
 const CARD_PARK = { pos: [-2.9, 0.58, 0], rot: [-Math.PI / 2, 0, 0] };
 
-// Dice housing: two circular slots in the (static) black tray floor, under the
-// FRONT low panel so they line up beneath the owl's eyes on the closed cover.
-// The unified insert covers them when shut and lifts clear to expose them.
-// DICE_Z is THE tunable for eye alignment; EYE_CUP x is the eye spacing.
+// Dice housing: two circular slots in the STATIC black tray floor at DICE_Z (-Z),
+// directly under the owl's eyes. The flat front panel covers them when shut and the
+// elevated block sits as a shelf just behind them. EYE_CUP x is the eye spacing.
 // Measured from the cover art (box-front-flat.png): the owl's eyes are centred at
-// ±0.52 of the box half-width and ~0.6 forward (local +Z). Dice sit right under
-// them, well within the low openable panel [Z_CREASE..INS_FRONT], so lifting the
-// panel exposes them. DICE_Z is THE tunable: raise toward +1 = more forward.
-const DICE_Z = 1.05 + ASSEMBLY_DZ + 0.15; // dice centre (verified on the render to sit under the owl's eyes); locked to the assembly
-const DICE_TRAY_LEN = FRONT_LEN * 0.5; // z-length of the black dice-well plate
+// ±0.52 of the box half-width and ≈0.334 from the TOP of the art, which maps to
+// local z ≈ -0.59 (see DICE_Z above). Lifting the flat panel up & back exposes them.
+const DICE_TRAY_LEN = 0.7; // z-length of the black dice-well plate
 const EYE_CUP_L = new Vector3(-0.52, DIE_Y, DICE_Z);
 const EYE_CUP_R = new Vector3(0.52, DIE_Y, DICE_Z);
 
@@ -828,9 +822,8 @@ function Lid({ lidRef, progress, texture, flapTex, feather, infoTex }) {
         <meshStandardMaterial map={infoTex} transparent roughness={0.6} toneMapped={false} />
       </mesh>
 
-      {/* ---- BLACK INNER TRAY FLOOR: fills the whole cavity, so it shows through
-          the wide BACK gap and under the insert. The two dice wells are recessed
-          into it under the front panel (beneath the owl's eyes). STATIC. ---- */}
+      {/* ---- BLACK INNER TRAY FLOOR (STATIC): fills the whole cavity. The two dice
+          wells are recessed into it at -Z, directly beneath the owl's eyes. ---- */}
       <mesh position={[0, TRAY_FLOOR_Y + 0.02, 0]}>
         <boxGeometry args={[CAV_W, 0.04, CAV_LEN]} />
         <meshStandardMaterial color="#0b0b0b" roughness={0.72} />
@@ -843,43 +836,43 @@ function Lid({ lidRef, progress, texture, flapTex, feather, infoTex }) {
       <DiceSlot position={[EYE_CUP_L.x, TRAY_FLOOR_Y, DICE_Z]} />
       <DiceSlot position={[EYE_CUP_R.x, TRAY_FLOOR_Y, DICE_Z]} />
 
-      {/* ---- UNIFIED PINK INSERT (ONE solid moving piece). Rear-hinged at its
-          local -Z edge; pulling the ribbon swings the ENTIRE assembly — elevated
-          block, low panel, AUGEN AUF! label and green ribbon together — up and
-          back off the hinge, clearing the deck to expose the dice. The inner
-          group cancels the hinge offset so children keep lid-space coords while
-          the whole thing pivots about the rear edge. ---- */}
-      <group ref={flapRef} position={[0, HINGE_Y, INS_BACK]}>
-        <group position={[0, -HINGE_Y, -INS_BACK]}>
-          {/* elevated block (rear half, by the hinge) */}
-          <mesh position={[0, SEAL_Y + ELEV_H / 2, REAR_C]}>
-            <boxGeometry args={[PINK_W, ELEV_H, REAR_LEN]} />
+      {/* ---- ELEVATED REAR BLOCK (STATIC): a low pink paperboard shelf at the far
+          -Z end, just behind the dice. It never moves during the opening. ---- */}
+      <mesh position={[0, SEAL_Y + ELEV_H / 2, ELEV_C]}>
+        <boxGeometry args={[PINK_W, ELEV_H, ELEV_LEN]} />
+        <meshStandardMaterial map={feather} roughness={0.72} toneMapped={false} />
+      </mesh>
+
+      {/* ---- MOVING FLAT FRONT PANEL (the ONLY piece that opens). Hinged at the
+          crease just BEHIND the dice (-Z edge). Pulling the front-lip ribbon swings
+          it UP & BACK about that hinge, uncovering the dice wells. The inner group
+          cancels the hinge offset so children keep lid-space coords. ---- */}
+      <group ref={flapRef} position={[0, HINGE_Y, HINGE_Z]}>
+        <group position={[0, -HINGE_Y, -HINGE_Z]}>
+          {/* low flat front panel (crease → front lip) */}
+          <mesh position={[0, LOW_TOP_Y + STEP_T / 2, PANEL_C]}>
+            <boxGeometry args={[PINK_W, STEP_T, PANEL_LEN]} />
             <meshStandardMaterial map={feather} roughness={0.72} toneMapped={false} />
           </mesh>
-          {/* low flat front panel (front half) */}
-          <mesh position={[0, LOW_TOP_Y + STEP_T / 2, FRONT_C]}>
-            <boxGeometry args={[PINK_W, STEP_T, FRONT_LEN]} />
-            <meshStandardMaterial map={feather} roughness={0.72} toneMapped={false} />
-          </mesh>
-          {/* AUGEN AUF! sticker on the TOP (-Y face) of the front panel */}
-          <mesh position={[0, LOW_TOP_Y - 0.004, FRONT_C]} rotation={[Math.PI / 2, 0, 0]}>
-            <planeGeometry args={[PINK_W * 0.9, FRONT_LEN * 0.82]} />
+          {/* AUGEN AUF! sticker on the TOP (-Y face), kept toward +Z (clear of eyes) */}
+          <mesh position={[0, LOW_TOP_Y - 0.004, 0.55]} rotation={[Math.PI / 2, 0, 0]}>
+            <planeGeometry args={[PINK_W * 0.9, 1.1]} />
             <meshBasicMaterial map={flapTex} toneMapped={false} />
           </mesh>
 
-          {/* ---- GREEN LATCH on the viewer-FRONT edge (local -Z lip): a narrow flat
-              ribbon wrapping over that vertical edge and hanging DOWN as a grab-tab.
-              This is the edge nearest the viewer once the lid opens/flips. When
+          {/* ---- GREEN LATCH on the viewer-FRONT lip (local +Z): a narrow flat ribbon
+              wrapping over that vertical edge and hanging DOWN as a grab-tab. This is
+              the edge nearest the viewer / closest to the front warning label. When
               closed it drapes below the edge (hidden from top — no green on the pink
-              top). Locked into the unified insert, so it rides with the assembly. ---- */}
-          <group position={[0, LOW_TOP_Y, INS_BACK]}>
-            {/* wrap capping the -Z vertical edge (flush with the board top) */}
-            <mesh position={[0, STEP_T / 2, -RIB_T / 2 - 0.002]}>
+              top). Parented in the moving panel, so it swings up & back with it. ---- */}
+          <group position={[0, LOW_TOP_Y, INS_FRONT]}>
+            {/* wrap capping the +Z vertical edge (flush with the board top) */}
+            <mesh position={[0, STEP_T / 2, RIB_T / 2 + 0.002]}>
               <boxGeometry args={[RIB_W, STEP_T, RIB_T]} />
               <meshStandardMaterial color={GREEN} roughness={0.85} metalness={0} toneMapped={false} />
             </mesh>
-            {/* grab-tab hanging DOWN past the -Z edge, drooping slightly outward */}
-            <group position={[0, STEP_T, -RIB_T / 2 - 0.002]} rotation={[-TAB_DROOP, 0, 0]}>
+            {/* grab-tab hanging DOWN past the +Z edge, drooping slightly outward */}
+            <group position={[0, STEP_T, RIB_T / 2 + 0.002]} rotation={[TAB_DROOP, 0, 0]}>
               <mesh position={[0, RIB_TAB_LEN / 2, 0]}>
                 <boxGeometry args={[RIB_W, RIB_TAB_LEN, RIB_T]} />
                 <meshStandardMaterial color={GREEN} roughness={0.85} metalness={0} toneMapped={false} />
