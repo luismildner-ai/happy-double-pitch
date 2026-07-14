@@ -75,7 +75,7 @@ const LID_TOTAL = LID_DEPTH + LID_TOP; // total lid thickness (pivot uses this)
 const CAV_CEIL = LID_DEPTH / 2; // interior ceiling
 const CAV_OPEN = -LID_DEPTH / 2; // opening rim
 const TRAY_FLOOR_Y = CAV_CEIL - 0.05; // black inner-tray floor, recessed near ceiling
-const DIE_Y = CAV_CEIL - 0.09; // dice recessed into the circular slots
+const DIE_Y = CAV_CEIL + 0.03; // raised toward the cover glass so the dice sit centred in the eye lenses (kills the parallax droop)
 const SLOT_R = 0.32; // circular dice-slot radius
 
 // ---- Rigid pink INSERT that sits inside the black tray ---------------------
@@ -170,7 +170,7 @@ const CARD_PARK = { pos: [-2.9, 0.58, 0], rot: [-Math.PI / 2, 0, 0] };
 // ±0.52 of the box half-width and ~0.6 forward (local +Z). Dice sit right under
 // them, well within the low openable panel [Z_CREASE..INS_FRONT], so lifting the
 // panel exposes them. DICE_Z is THE tunable: raise toward +1 = more forward.
-const DICE_Z = 1.05 + ASSEMBLY_DZ; // dice centre, locked to the assembly (moves with ASSEMBLY_DZ)
+const DICE_Z = 1.05 + ASSEMBLY_DZ + 0.15; // dice centre (verified on the render to sit under the owl's eyes); locked to the assembly
 const DICE_TRAY_LEN = FRONT_LEN * 0.5; // z-length of the black dice-well plate
 const EYE_CUP_L = new Vector3(-0.52, DIE_Y, DICE_Z);
 const EYE_CUP_R = new Vector3(0.52, DIE_Y, DICE_Z);
@@ -867,19 +867,19 @@ function Lid({ lidRef, progress, texture, flapTex, feather, infoTex }) {
             <meshBasicMaterial map={flapTex} toneMapped={false} />
           </mesh>
 
-          {/* ---- GREEN LATCH on the FRONT lip (local -Z edge): a narrow flat
-              ribbon that wraps over the front vertical edge and hangs DOWN as a
-              grab-tab. When closed it drapes below the edge (hidden from top — no
-              green on the pink top). Locked into the unified insert, so it swings
-              as one with the whole assembly. ---- */}
-          <group position={[0, LOW_TOP_Y, INS_FRONT]}>
-            {/* wrap capping the front (+Z) vertical edge (flush with the board top) */}
-            <mesh position={[0, STEP_T / 2, RIB_T / 2 + 0.002]}>
+          {/* ---- GREEN LATCH on the viewer-FRONT edge (local -Z lip): a narrow flat
+              ribbon wrapping over that vertical edge and hanging DOWN as a grab-tab.
+              This is the edge nearest the viewer once the lid opens/flips. When
+              closed it drapes below the edge (hidden from top — no green on the pink
+              top). Locked into the unified insert, so it rides with the assembly. ---- */}
+          <group position={[0, LOW_TOP_Y, INS_BACK]}>
+            {/* wrap capping the -Z vertical edge (flush with the board top) */}
+            <mesh position={[0, STEP_T / 2, -RIB_T / 2 - 0.002]}>
               <boxGeometry args={[RIB_W, STEP_T, RIB_T]} />
               <meshStandardMaterial color={GREEN} roughness={0.85} metalness={0} toneMapped={false} />
             </mesh>
-            {/* grab-tab hanging DOWN past the +Z edge, drooping slightly outward */}
-            <group position={[0, STEP_T, RIB_T / 2 + 0.002]} rotation={[TAB_DROOP, 0, 0]}>
+            {/* grab-tab hanging DOWN past the -Z edge, drooping slightly outward */}
+            <group position={[0, STEP_T, -RIB_T / 2 - 0.002]} rotation={[-TAB_DROOP, 0, 0]}>
               <mesh position={[0, RIB_TAB_LEN / 2, 0]}>
                 <boxGeometry args={[RIB_W, RIB_TAB_LEN, RIB_T]} />
                 <meshStandardMaterial color={GREEN} roughness={0.85} metalness={0} toneMapped={false} />
