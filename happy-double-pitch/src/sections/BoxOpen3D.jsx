@@ -176,6 +176,15 @@ const DICE_TRAY_LEN = 0.7; // z-length of the black dice-well plate
 const EYE_CUP_L = new Vector3(-0.52, DIE_Y, DICE_Z);
 const EYE_CUP_R = new Vector3(0.52, DIE_Y, DICE_Z);
 
+// Clear plastic eye-window covers on the OUTER cover: two glossy discs sitting just
+// above the owl-art plane, centred on the eye cut-outs (x ±0.52, z ≈ -0.586 on the
+// cover, same longitudinal spot the dice align to). Purely decorative — children of
+// the lid, so they ride with every existing animation; no other coords touched.
+const EYE_LENS_X = 0.52;
+const EYE_LENS_Z = -0.586; // owl eye centre on the cover art
+const EYE_LENS_Y = CAV_CEIL + LID_TOP + 0.012; // a hair above the art plane (art at +0.006)
+const EYE_LENS_R = 0.34; // lens radius (covers the eye lens circle)
+
 // Stage timings.
 const RELEASE = 0.62; // dice hand off to physics here
 const CONTENT_OUT = [0.15, 0.5];
@@ -809,6 +818,26 @@ function Lid({ lidRef, progress, texture, flapTex, feather, infoTex }) {
         <planeGeometry args={[W * 0.98, H * 0.98]} />
         <meshStandardMaterial map={texture} roughness={0.5} toneMapped={false} />
       </mesh>
+
+      {/* ---- CLEAR PLASTIC EYE-WINDOW COVERS: two glossy discs over the owl's eyes,
+          a hair above the art plane. Decorative only; children of the lid so they ride
+          with every existing animation. Slightly domed via a gently flattened sphere. ---- */}
+      {[-EYE_LENS_X, EYE_LENS_X].map((x, i) => (
+        <mesh key={`eyeLens${i}`} position={[x, EYE_LENS_Y, EYE_LENS_Z]} scale={[1, 0.16, 1]}>
+          <sphereGeometry args={[EYE_LENS_R, 48, 32]} />
+          <meshPhysicalMaterial
+            transparent
+            opacity={0.35}
+            roughness={0.05}
+            metalness={0.1}
+            transmission={0.9}
+            clearcoat={1.0}
+            clearcoatRoughness={0.05}
+            ior={1.45}
+            toneMapped={false}
+          />
+        </mesh>
+      ))}
 
       {/* ---- RIM WALLS (thick sides forming the cavity) ---- */}
       {[
