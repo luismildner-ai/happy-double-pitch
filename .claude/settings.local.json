@@ -42,7 +42,8 @@
       "Bash(python3 -)",
       "Bash(git commit -q -m 'fix: re-orient insert to +Z front, eye-align dice, slim the elevated step *)",
       "Bash(git commit -q -m 'fix: center dice in owl eyes \\(raise DIE_Y\\), move green latch to viewer-front edge *)",
-      "Bash(git commit -q -m 'fix: invert insert — dice to -Z under owl eyes, static rear block, latch on +Z front lip *)"
+      "Bash(git commit -q -m 'fix: invert insert — dice to -Z under owl eyes, static rear block, latch on +Z front lip *)",
+      "Bash(git commit -q -m 'fix: flap opens UP \\(not down\\), two-tier step made distinct, latch drapes down front lip *)"
     ]
   },
   "hooks": {

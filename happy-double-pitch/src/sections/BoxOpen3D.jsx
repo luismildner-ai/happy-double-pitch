@@ -118,13 +118,20 @@ const ELEV_C = HINGE_Z - ELEV_LEN / 2; // elevated block centre, behind the hing
 const PANEL_LEN = INS_FRONT - HINGE_Z; // flat front panel z-length (crease → front lip)
 const PANEL_C = (INS_FRONT + HINGE_Z) / 2; // flat front panel centre z
 const STEP_T = 0.06; // flat panel board thickness
-const ELEV_H = 0.13; // elevated shelf height — a sleek, low paperboard tier
-const SEAL_Y = CAV_OPEN + 0.02; // elevated block seat height (near the rim)
-const LOW_TOP_Y = SEAL_Y + 0.02; // flat panel sits a clean ~0.08 step below the block top
+const SEAL_Y = CAV_OPEN + 0.02; // insert seat height (near the rim)
+const LOW_TOP_Y = SEAL_Y + 0.02; // flat FRONT panel top face
+// The elevated REAR block is a solid raised step: its display face rises STEP_RISE
+// proud of the flat panel top (toward the viewer once the lid flips), so the two
+// tiers read clearly and the flat panel hinges at the base of this step's riser.
+const STEP_RISE = 0.06; // visible step height between the flat panel top and the block top
+const ELEV_TOP_Y = LOW_TOP_Y - STEP_RISE; // block's toward-viewer display face (proud of the panel)
+const ELEV_H = 0.14; // elevated block thickness — kept low so it never occludes the revealed dice
 const PINK_W = INS_W; // pink spans the full insert width (flush L/R)
-const HINGE_Y = LOW_TOP_Y; // hinge at the flat panel's top edge, at the crease
+const HINGE_Y = LOW_TOP_Y; // hinge at the flat panel's top edge, at the base of the step riser
 const FLAP_CLOSED = 0; // panel lies flat, sealing the dice
-const FLAP_STAND = -Math.PI * 0.55; // NEGATIVE: the front lip lifts UP & swings BACK over the hinge
+// POSITIVE: after the lid's 180° flip, this swings the front lip UP & BACK (a door
+// opening against the static step). The negative sign flopped it DOWN through the box.
+const FLAP_STAND = Math.PI * 0.55;
 const FLAP_OPEN = [0.45, 0.6]; // scroll window over which it opens
 
 // ---- Green latch: a narrow FLAT fabric ribbon (not a loop) -----------------
@@ -836,9 +843,11 @@ function Lid({ lidRef, progress, texture, flapTex, feather, infoTex }) {
       <DiceSlot position={[EYE_CUP_L.x, TRAY_FLOOR_Y, DICE_Z]} />
       <DiceSlot position={[EYE_CUP_R.x, TRAY_FLOOR_Y, DICE_Z]} />
 
-      {/* ---- ELEVATED REAR BLOCK (STATIC): a low pink paperboard shelf at the far
-          -Z end, just behind the dice. It never moves during the opening. ---- */}
-      <mesh position={[0, SEAL_Y + ELEV_H / 2, ELEV_C]}>
+      {/* ---- ELEVATED REAR BLOCK (STATIC): a solid raised pink step at the far -Z
+          end, just behind the dice. Its display face sits STEP_RISE proud of the flat
+          panel, forming the vertical riser the front panel hinges against. Never
+          moves during the opening. ---- */}
+      <mesh position={[0, ELEV_TOP_Y + ELEV_H / 2, ELEV_C]}>
         <boxGeometry args={[PINK_W, ELEV_H, ELEV_LEN]} />
         <meshStandardMaterial map={feather} roughness={0.72} toneMapped={false} />
       </mesh>
@@ -866,14 +875,15 @@ function Lid({ lidRef, progress, texture, flapTex, feather, infoTex }) {
               closed it drapes below the edge (hidden from top — no green on the pink
               top). Parented in the moving panel, so it swings up & back with it. ---- */}
           <group position={[0, LOW_TOP_Y, INS_FRONT]}>
-            {/* wrap capping the +Z vertical edge (flush with the board top) */}
+            {/* wrap capping the +Z vertical edge (spans the board thickness) */}
             <mesh position={[0, STEP_T / 2, RIB_T / 2 + 0.002]}>
               <boxGeometry args={[RIB_W, STEP_T, RIB_T]} />
               <meshStandardMaterial color={GREEN} roughness={0.85} metalness={0} toneMapped={false} />
             </mesh>
-            {/* grab-tab hanging DOWN past the +Z edge, drooping slightly outward */}
-            <group position={[0, STEP_T, RIB_T / 2 + 0.002]} rotation={[TAB_DROOP, 0, 0]}>
-              <mesh position={[0, RIB_TAB_LEN / 2, 0]}>
+            {/* grab-tab wrapping DOWN over the front lip on the display (-Y) side,
+                drooping slightly outward — hidden below the lip when closed */}
+            <group position={[0, 0, RIB_T / 2 + 0.002]} rotation={[-TAB_DROOP, 0, 0]}>
+              <mesh position={[0, -RIB_TAB_LEN / 2, 0]}>
                 <boxGeometry args={[RIB_W, RIB_TAB_LEN, RIB_T]} />
                 <meshStandardMaterial color={GREEN} roughness={0.85} metalness={0} toneMapped={false} />
               </mesh>
