@@ -898,21 +898,23 @@ function Lid({ lidRef, progress, texture, flapTex, feather, infoTex }) {
             <meshBasicMaterial map={flapTex} toneMapped={false} />
           </mesh>
 
-          {/* ---- GREEN LATCH on the viewer-FRONT lip (local +Z): a narrow flat ribbon
-              wrapping over that vertical edge and hanging DOWN as a grab-tab. This is
-              the edge nearest the viewer / closest to the front warning label. When
-              closed it drapes below the edge (hidden from top — no green on the pink
-              top). Parented in the moving panel, so it swings up & back with it. ---- */}
-          <group position={[0, LOW_TOP_Y, INS_FRONT]}>
-            {/* wrap capping the +Z vertical edge (spans the board thickness) */}
-            <mesh position={[0, STEP_T / 2, RIB_T / 2 + 0.002]}>
+          {/* ---- GREEN LATCH on the crease edge (local -Z). After the lid's 180° flip
+              this edge maps to world +Z — the near/viewer side, closest to the front
+              WARNING wall of the tray — so the ribbon RESTS at the front, wraps DOWN
+              over that lip when closed, and (parented in the moving panel) swings UP &
+              BACK with the front lip as the panel lifts. Verified in a transform-replay
+              sim: rest world-z +0.78 (front), tab hangs down when flat, then rises and
+              moves -Z (up & back) through the open. ---- */}
+          <group position={[0, LOW_TOP_Y, HINGE_Z]}>
+            {/* wrap capping the -Z vertical edge (spans the board thickness) */}
+            <mesh position={[0, STEP_T / 2, -RIB_T / 2 - 0.002]}>
               <boxGeometry args={[RIB_W, STEP_T, RIB_T]} />
               <meshStandardMaterial color={GREEN} roughness={0.85} metalness={0} toneMapped={false} />
             </mesh>
-            {/* grab-tab wrapping DOWN over the front lip on the display (-Y) side,
-                drooping slightly outward — hidden below the lip when closed */}
-            <group position={[0, 0, RIB_T / 2 + 0.002]} rotation={[-TAB_DROOP, 0, 0]}>
-              <mesh position={[0, -RIB_TAB_LEN / 2, 0]}>
+            {/* grab-tab wrapping DOWN over the front lip (+Y local → world-down when
+                flat), drooping slightly outward — hidden below the lip when closed */}
+            <group position={[0, STEP_T, -RIB_T / 2 - 0.002]} rotation={[-TAB_DROOP, 0, 0]}>
+              <mesh position={[0, RIB_TAB_LEN / 2, 0]}>
                 <boxGeometry args={[RIB_W, RIB_TAB_LEN, RIB_T]} />
                 <meshStandardMaterial color={GREEN} roughness={0.85} metalness={0} toneMapped={false} />
               </mesh>

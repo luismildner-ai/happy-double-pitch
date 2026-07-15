@@ -44,7 +44,8 @@
       "Bash(git commit -q -m 'fix: center dice in owl eyes \\(raise DIE_Y\\), move green latch to viewer-front edge *)",
       "Bash(git commit -q -m 'fix: invert insert — dice to -Z under owl eyes, static rear block, latch on +Z front lip *)",
       "Bash(git commit -q -m 'fix: flap opens UP \\(not down\\), two-tier step made distinct, latch drapes down front lip *)",
-      "Bash(git commit -q -m 'feat: add clear glossy plastic lens covers over the owl'\\\\''s eyes *)"
+      "Bash(git commit -q -m 'feat: add clear glossy plastic lens covers over the owl'\\\\''s eyes *)",
+      "Bash(git commit -q -m 'fix: move green latch to the front \\(warning-wall\\) edge, swinging up & back *)"
     ]
   },
   "hooks": {
