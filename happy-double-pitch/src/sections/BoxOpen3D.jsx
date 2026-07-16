@@ -198,8 +198,20 @@ const EYE_CUP_R = new Vector3(0.52, DIE_Y, DICE_Z);
 // above the owl-art plane, centred on the eye cut-outs (x ±0.52, z ≈ -0.586 on the
 // cover, same longitudinal spot the dice align to). Purely decorative — children of
 // the lid, so they ride with every existing animation; no other coords touched.
-const EYE_LENS_X = 0.52;
-const EYE_LENS_Z = -0.586; // owl eye centre on the cover art
+// FULL-BLEED cover art: the owl print runs edge-to-edge across the top face — head
+// and ears to the top edge, wings/shoes to the side edges — with no black margin.
+// (It used to be inset to W×H*0.98, which left a frame once the lid grew to OW×OH
+// for the telescoping fit.) BLEED trims a hair so the art never overhangs the edge.
+const ART_BLEED = 0.995;
+const ART_W = OW * ART_BLEED;
+const ART_H = OH * ART_BLEED;
+// The eye constants below were pixel-measured against the OLD, inset art plane, so
+// they must ride the same scale-up — otherwise the owl's eyes slide out from under
+// their lens domes. Anything measured on the art scales by these two factors.
+const ART_SX = ART_W / (W * 0.98);
+const ART_SZ = ART_H / (H * 0.98);
+const EYE_LENS_X = 0.52 * ART_SX;
+const EYE_LENS_Z = -0.586 * ART_SZ; // owl eye centre on the cover art
 const EYE_LENS_Y = CAV_CEIL + LID_TOP + 0.008; // seated on the art plane (art at +0.006)
 const EYE_LENS_R = 0.34; // lens radius (covers the eye lens circle)
 const EYE_LENS_RISE = 0.62; // dome height as a fraction of R — a prominent, bubbled
@@ -878,7 +890,7 @@ function Lid({ lidRef, progress, texture, flapTex, feather, infoTex }) {
         <meshStandardMaterial color="#0a0a0a" roughness={0.6} />
       </mesh>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, CAV_CEIL + LID_TOP + 0.006, 0]}>
-        <planeGeometry args={[W * 0.98, H * 0.98]} />
+        <planeGeometry args={[ART_W, ART_H]} />
         <meshStandardMaterial map={texture} roughness={0.5} toneMapped={false} />
       </mesh>
 
