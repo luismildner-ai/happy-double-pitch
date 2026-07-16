@@ -120,12 +120,13 @@ const PANEL_C = (INS_FRONT + HINGE_Z) / 2; // flat front panel centre z
 const STEP_T = 0.06; // flat panel board thickness
 const SEAL_Y = CAV_OPEN + 0.02; // insert seat height (near the rim)
 const LOW_TOP_Y = SEAL_Y + 0.02; // flat FRONT panel top face
-// The elevated REAR block is a solid raised step: its display face rises STEP_RISE
-// proud of the flat panel top (toward the viewer once the lid flips), so the two
-// tiers read clearly and the flat panel hinges at the base of this step's riser.
-const STEP_RISE = 0.06; // visible step height between the flat panel top and the block top
-const ELEV_TOP_Y = LOW_TOP_Y - STEP_RISE; // block's toward-viewer display face (proud of the panel)
-const ELEV_H = 0.14; // elevated block thickness — kept low so it never occludes the revealed dice
+// Both pink panels are the SAME uniform cardboard sheet (thickness STEP_T). The rear
+// panel is not a thicker block — it is an identical flat sheet that simply rests
+// higher, on a raised support structure underneath it. STEP_RISE is that purely
+// positional elevation (toward the viewer once the lid flips); the flat front panel
+// hinges against the vertical riser this step forms.
+const STEP_RISE = 0.06; // visible step height between the flat panel top and the rear panel top
+const ELEV_TOP_Y = LOW_TOP_Y - STEP_RISE; // rear panel's toward-viewer display face (proud of the front panel)
 const PINK_W = INS_W; // pink spans the full insert width (flush L/R)
 const HINGE_Y = LOW_TOP_Y; // hinge at the flat panel's top edge, at the base of the step riser
 const FLAP_CLOSED = 0; // panel lies flat, sealing the dice
@@ -872,12 +873,19 @@ function Lid({ lidRef, progress, texture, flapTex, feather, infoTex }) {
       <DiceSlot position={[EYE_CUP_L.x, TRAY_FLOOR_Y, DICE_Z]} />
       <DiceSlot position={[EYE_CUP_R.x, TRAY_FLOOR_Y, DICE_Z]} />
 
-      {/* ---- ELEVATED REAR BLOCK (STATIC): a solid raised pink step at the far -Z
-          end, just behind the dice. Its display face sits STEP_RISE proud of the flat
-          panel, forming the vertical riser the front panel hinges against. Never
-          moves during the opening. ---- */}
-      <mesh position={[0, ELEV_TOP_Y + ELEV_H / 2, ELEV_C]}>
-        <boxGeometry args={[PINK_W, ELEV_H, ELEV_LEN]} />
+      {/* ---- ELEVATED REAR PANEL (STATIC): the SAME uniform cardboard sheet as the
+          front flap (thickness STEP_T) — not a thicker block. It simply rests STEP_RISE
+          higher, held up by the support structure below. Its display face sits proud of
+          the front panel, forming the riser the front panel hinges against. ---- */}
+      <mesh position={[0, ELEV_TOP_Y + STEP_T / 2, ELEV_C]}>
+        <boxGeometry args={[PINK_W, STEP_T, ELEV_LEN]} />
+        <meshStandardMaterial map={feather} roughness={0.72} toneMapped={false} />
+      </mesh>
+      {/* the raised support underneath the rear panel — the structure it rests on.
+          Fills from the rear sheet's underside down to the front panel's plane, so the
+          rear sheet reads as elevated rather than floating. Inset so it reads as a base. */}
+      <mesh position={[0, ELEV_TOP_Y + STEP_T + STEP_RISE / 2, ELEV_C]}>
+        <boxGeometry args={[PINK_W * 0.92, STEP_RISE, ELEV_LEN * 0.9]} />
         <meshStandardMaterial map={feather} roughness={0.72} toneMapped={false} />
       </mesh>
 
