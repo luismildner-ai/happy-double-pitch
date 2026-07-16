@@ -47,7 +47,8 @@
       "Bash(git commit -q -m 'feat: add clear glossy plastic lens covers over the owl'\\\\''s eyes *)",
       "Bash(git commit -q -m 'fix: move green latch to the front \\(warning-wall\\) edge, swinging up & back *)",
       "Bash(git commit -q -m 'fix: rear lid panel is same uniform sheet thickness as front, just elevated on a support *)",
-      "Bash(git commit -q -m 'feat: drag-to-open ribbon box \\(CSS-3D + Framer Motion\\), replacing WebGL scene *)"
+      "Bash(git commit -q -m 'feat: drag-to-open ribbon box \\(CSS-3D + Framer Motion\\), replacing WebGL scene *)",
+      "Bash(node \"/private/tmp/claude-501/-Users-luismildner-Desktop-claude-code/7ce08876-6e2d-481a-b272-c63d7f5087fb/scratchpad/sim6.mjs\")"
     ]
   },
   "hooks": {

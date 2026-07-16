@@ -110,7 +110,9 @@ const INS_W = CAV_W - 0.02; // insert width (flush to L/R inner walls)
 // The dice sit at -Z under the eyes. The elevated block is a STATIC rear shelf. ONLY
 // the flat FRONT panel moves — it is hinged at the crease just BEHIND the dice and
 // swings UP & BACK, uncovering the dice wells.
-const INS_FRONT = OH / 2 - LID_WALL; // +Z free FRONT lip (near the rim, viewer side)
+const FRONT_MARGIN = 0.45; // black floor strip in FRONT of the insert where the green
+// ribbon lies flat, matching the physical box (the pink insert does not reach the rim).
+const INS_FRONT = OH / 2 - LID_WALL - FRONT_MARGIN; // +Z free FRONT lip of the flap
 const DICE_Z = -0.58; // dice centre — directly under the owl's eyes (measured ≈ -0.59)
 const HINGE_Z = DICE_Z - 0.2; // crease just BEHIND the dice; the front panel hinges here (-0.78)
 const ELEV_LEN = 0.55; // static elevated rear-shelf z-length (short, by the -Z wall)
@@ -141,10 +143,10 @@ const FLAP_OPEN = [0.45, 0.6]; // scroll window over which it opens
 // closed it drapes below the edge — completely hidden from a top-down view (no green
 // on the pink top). It is parented INSIDE the moving front panel, so it is locked to
 // the front lip and swings up & back with it through the entire opening arc.
-const RIB_W = 0.22; // ribbon strip width (narrow fraction of the box)
-const RIB_T = 0.02; // ribbon strip thickness (thin, flat)
-const RIB_TAB_LEN = 0.32; // grab-tab length hanging past the front edge
-const TAB_DROOP = 0.12; // fixed slight outward droop (ribbon is rigid to the lip)
+const RIB_W = 0.26; // ribbon strip width (flat satin band, ~fraction of the box width)
+const RIB_T = 0.015; // ribbon strip thickness (very thin, flat satin)
+const RIB_ROOT = 0.09; // length of ribbon that laps back onto the flap top (the anchor)
+const RIB_TAB_LEN = 0.42; // flat tongue length lying forward on the floor toward the wall
 
 const INNER_W = W - WALL * 2;
 const INNER_H = H - WALL * 2;
@@ -906,27 +908,28 @@ function Lid({ lidRef, progress, texture, flapTex, feather, infoTex }) {
             <meshBasicMaterial map={flapTex} toneMapped={false} />
           </mesh>
 
-          {/* ---- GREEN LATCH on the crease edge (local -Z). After the lid's 180° flip
-              this edge maps to world +Z — the near/viewer side, closest to the front
-              WARNING wall of the tray — so the ribbon RESTS at the front, wraps DOWN
-              over that lip when closed, and (parented in the moving panel) swings UP &
-              BACK with the front lip as the panel lifts. Verified in a transform-replay
-              sim: rest world-z +0.78 (front), tab hangs down when flat, then rises and
-              moves -Z (up & back) through the open. ---- */}
-          <group position={[0, LOW_TOP_Y, HINGE_Z]}>
-            {/* wrap capping the -Z vertical edge (spans the board thickness) */}
-            <mesh position={[0, STEP_T / 2, -RIB_T / 2 - 0.002]}>
-              <boxGeometry args={[RIB_W, STEP_T, RIB_T]} />
-              <meshStandardMaterial color={GREEN} roughness={0.85} metalness={0} toneMapped={false} />
+          {/* ---- GREEN RIBBON latch — a flat satin pull-strip on the flap's FREE edge
+              (INS_FRONT), the edge nearest the front WARNING wall. It laps back onto the
+              flap top (the anchor) and runs FORWARD as a flat tongue lying on the black
+              floor margin, pointing toward the viewer — exactly the resting pose in the
+              reference. Being parented in the moving panel, the whole ribbon LIFTS and
+              folds up & back with the free edge as the flap opens (sim: free edge rises
+              from y0.58 → y3.38). This replaces the old crease-edge tab, which sat on the
+              hinge and barely moved. ---- */}
+          <group position={[0, LOW_TOP_Y, INS_FRONT]}>
+            {/* single flat satin band: laps ~RIB_ROOT onto the flap top, then extends
+                RIB_TAB_LEN forward over the free edge onto the floor margin */}
+            <mesh position={[0, STEP_T + RIB_T / 2, RIB_TAB_LEN / 2 - RIB_ROOT]}>
+              <boxGeometry args={[RIB_W, RIB_T, RIB_TAB_LEN]} />
+              <meshStandardMaterial
+                color={GREEN}
+                roughness={0.32}
+                metalness={0.1}
+                emissive={GREEN}
+                emissiveIntensity={0.12}
+                toneMapped={false}
+              />
             </mesh>
-            {/* grab-tab wrapping DOWN over the front lip (+Y local → world-down when
-                flat), drooping slightly outward — hidden below the lip when closed */}
-            <group position={[0, STEP_T, -RIB_T / 2 - 0.002]} rotation={[-TAB_DROOP, 0, 0]}>
-              <mesh position={[0, RIB_TAB_LEN / 2, 0]}>
-                <boxGeometry args={[RIB_W, RIB_TAB_LEN, RIB_T]} />
-                <meshStandardMaterial color={GREEN} roughness={0.85} metalness={0} toneMapped={false} />
-              </mesh>
-            </group>
           </group>
         </group>
       </group>
