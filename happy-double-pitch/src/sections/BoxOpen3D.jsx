@@ -63,14 +63,20 @@ const prefersReducedMotion =
 const W = 2.6;
 const H = 3.6;
 const WALL = 0.07;
-const WALL_H = 0.5; // inner wall height
+const WALL_H = 0.32; // inner wall height — SQUASHED: the real box is a flat, slim deck-box
 const FLOOR_T = 0.06; // floor slab thickness
 
 // ---- Hollow lid cavity (real depth; not a solid block) --------------------
-const LID_DEPTH = 0.42; // interior cavity depth
+const LID_DEPTH = 0.42; // interior cavity depth (holds the insert + dice bay)
 const LID_WALL = 0.06; // rim wall thickness
 const LID_TOP = 0.05; // top plate thickness (owl art)
-const LID_TOTAL = LID_DEPTH + LID_TOP; // total lid thickness (pivot uses this)
+// TELESCOPING SLEEVE: the black lid is not a cap that rests on the tray rim — it
+// slides all the way DOWN OVER the pink tray. Its rim walls continue below the
+// cavity opening as a skirt that sheathes the tray's outer walls, leaving only a
+// PINK_SLIVER of pink showing at the very bottom.
+const LID_CLEAR = 0.05; // slip fit between the lid's inner face and the tray's outer face
+const PINK_SLIVER = 0.04; // how much pink tray stays visible below the skirt when closed
+const SKIRT_H = WALL_H - PINK_SLIVER; // skirt drop below the cavity opening
 // Local y within the lid group (opening faces -Y when closed):
 const CAV_CEIL = LID_DEPTH / 2; // interior ceiling
 const CAV_OPEN = -LID_DEPTH / 2; // opening rim
@@ -94,9 +100,10 @@ const SLOT_R = 0.32; // circular dice-slot radius
 //   REAR half  (local +Z) — a tall ELEVATED block by the hinge.
 // Pulling the ribbon swings the ENTIRE piece up and back about the rear hinge,
 // fully clearing the deck to expose the dice.
-const OW = W + 0.05; // lid outer width
-const OH = H + 0.05; // lid outer length
-const LID_INSET = LID_WALL + 0.03; // rim-wall margin
+// Sized so the CAVITY clears the tray's OUTER footprint (W×H) — that is what lets
+// the lid telescope down over it instead of perching on the rim.
+const OW = W + LID_CLEAR + LID_WALL * 2; // lid outer width
+const OH = H + LID_CLEAR + LID_WALL * 2; // lid outer length
 const CAV_W = OW - LID_WALL * 2; // inner cavity width
 const CAV_LEN = OH - LID_WALL * 2; // inner cavity length
 const INS_W = CAV_W - 0.02; // insert width (flush to L/R inner walls)
@@ -161,7 +168,15 @@ const CARD_Z = INNER_H * 0.22; // deck offset into the +Z half of the tray
 const DIE_R = 0.24;
 
 // Lid keyframes (closed → lifted → right → flipped, then settle).
-const LID_CLOSED_Y = WALL_H + LID_TOTAL / 2 + 0.02;
+// Closed, the cavity's opening rim sits level with the tray rim and the skirt
+// continues on down the outside of the tray walls.
+const LID_CLOSED_Y = WALL_H + LID_DEPTH / 2;
+// The visible black FRONT LIP: everything from the skirt's bottom edge up to the
+// top plate. The info graphic is centred on this whole face, not just the rim.
+const LIP_BOT = CAV_OPEN - SKIRT_H;
+const LIP_TOP = CAV_CEIL + LID_TOP;
+const LIP_H = LIP_TOP - LIP_BOT;
+const LIP_C = (LIP_TOP + LIP_BOT) / 2;
 const LID_REST = { x: 2.9, y: 0.7, z: 0 };
 
 // Content park spots (left, stacked, lying flat). rot -90°X = artwork faces UP
@@ -185,8 +200,10 @@ const EYE_CUP_R = new Vector3(0.52, DIE_Y, DICE_Z);
 // the lid, so they ride with every existing animation; no other coords touched.
 const EYE_LENS_X = 0.52;
 const EYE_LENS_Z = -0.586; // owl eye centre on the cover art
-const EYE_LENS_Y = CAV_CEIL + LID_TOP + 0.012; // a hair above the art plane (art at +0.006)
+const EYE_LENS_Y = CAV_CEIL + LID_TOP + 0.008; // seated on the art plane (art at +0.006)
 const EYE_LENS_R = 0.34; // lens radius (covers the eye lens circle)
+const EYE_LENS_RISE = 0.62; // dome height as a fraction of R — a prominent, bubbled
+// half-sphere curving outward like a retro sunglass lens, NOT a flat disc.
 
 // Stage timings.
 const RELEASE = 0.62; // dice hand off to physics here
@@ -465,54 +482,97 @@ function makeTitleDecal() {
   return t;
 }
 
-// Lid bottom-edge info panel (transparent ground over the black lid edge):
-// left = HAPPY DOUBLE / NO RISK, NO RUN!  ·  right = 8–99 · 20 Min. · 2+ Players.
-const LID_INFO_ASPECT = 1900 / 240;
+// FRONT BLACK LIP graphic (transparent ground over the black lid face), matching
+// the German retail box: a big heavy title block on the left, then the spec icons
+// —  green feather · 8–99 · 20 Min. · ab 2 · pink feather — all vertically centred
+// and scaled to fill the face generously.
+const LID_INFO_ASPECT = 1900 / 440;
+// Heavy compact grotesk stack; Arial Black / Impact are the condensed, weighty
+// faces closest to the box's lettering and are present on essentially every host.
+const HEAVY = '"Arial Black", "Helvetica Neue", Impact, Arial, sans-serif';
 function makeLidInfoDecal() {
-  const cw = 1900, ch = 240;
+  const cw = 1900, ch = 440;
   const c = document.createElement('canvas');
   c.width = cw;
   c.height = ch;
   const ctx = c.getContext('2d');
   ctx.clearRect(0, 0, cw, ch);
-  ctx.fillStyle = '#ffffff';
-  // left block
+
+  // ---- left: the title block. Both lines are FIT to the column width rather than
+  // given a fixed size, so they land as large as the space allows without ever
+  // colliding with the icons — the metrics of the heavy face vary by host. ----
+  const leftX = 44;
+  const leftW = cw * 0.5 - leftX - 40;
+  const fit = (text, maxW, startPx) => {
+    let px = startPx;
+    ctx.font = `900 ${px}px ${HEAVY}`;
+    while (ctx.measureText(text).width > maxW && px > 8) {
+      px -= 2;
+      ctx.font = `900 ${px}px ${HEAVY}`;
+    }
+    return px;
+  };
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.font = `900 ${Math.floor(ch * 0.34)}px Arial, sans-serif`;
-  ctx.fillText('HAPPY DOUBLE', 40, ch * 0.4);
-  ctx.font = `700 ${Math.floor(ch * 0.2)}px Arial, sans-serif`;
-  ctx.fillText('NO RISK, NO RUN!', 40, ch * 0.72);
-  // right block: three specs with minimal icons
+  ctx.fillStyle = '#ffffff';
+  fit('HAPPY DOUBLE', leftW, Math.floor(ch * 0.46));
+  ctx.fillText('HAPPY DOUBLE', leftX, ch * 0.34);
+  ctx.fillStyle = GREEN;
+  fit('NO RISK, NO RUN!', leftW * 0.86, Math.floor(ch * 0.3));
+  ctx.fillText('NO RISK, NO RUN!', leftX + 2, ch * 0.72);
+
+  // ---- right: green feather · 8–99 · 20 Min. · ab 2 · pink feather ----
+  // Laid out as a MEASURED FLOW, not fixed columns: each item claims the greater of
+  // its icon diameter and its label width. Fixed columns overlapped, because "20 Min."
+  // is far wider than "ab 2" and the feathers need almost no width at all.
   const specs = [
+    { icon: 'feather', color: GREEN },
     { icon: 'age', label: '8–99' },
     { icon: 'time', label: '20 Min.' },
-    { icon: 'players', label: '2+ Players' },
+    { icon: 'players', label: 'ab 2' },
+    { icon: 'feather', color: INSERT_PINK },
   ];
-  const rx0 = cw * 0.42;
-  const colW = (cw - rx0 - 60) / specs.length;
-  ctx.font = `800 ${Math.floor(ch * 0.2)}px Arial, sans-serif`;
-  ctx.textAlign = 'center';
+  const iy = ch * 0.4; // icon centre
+  const r = ch * 0.16; // icon radius
+  const labelPx = Math.floor(ch * 0.15);
+  const gap = ch * 0.09;
+  ctx.font = `900 ${labelPx}px ${HEAVY}`;
+  const widths = specs.map((s) =>
+    s.icon === 'feather' ? r * 1.3 : Math.max(r * 2, ctx.measureText(s.label).width)
+  );
+  const totalW = widths.reduce((a, b) => a + b, 0) + gap * (specs.length - 1);
+  let x = cw - 40 - totalW; // right-aligned against the trailing pink feather
   specs.forEach((s, i) => {
-    const cx = rx0 + colW * i + colW / 2;
+    const cx = x + widths[i] / 2;
+    x += widths[i] + gap;
+    if (s.icon === 'feather') {
+      drawFeather(ctx, cx, ch * 0.5, r * 1.7, -0.45, s.color);
+      return;
+    }
     ctx.strokeStyle = '#ffffff';
     ctx.fillStyle = '#ffffff';
-    ctx.lineWidth = ch * 0.03;
-    const iy = ch * 0.34, r = ch * 0.14;
+    ctx.lineWidth = ch * 0.028;
     if (s.icon === 'age') {
       ctx.beginPath(); ctx.arc(cx, iy, r, 0, Math.PI * 2); ctx.stroke();
       ctx.beginPath(); ctx.arc(cx, iy, r * 0.28, 0, Math.PI * 2); ctx.fill();
     } else if (s.icon === 'time') {
       ctx.beginPath(); ctx.arc(cx, iy, r, 0, Math.PI * 2); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(cx, iy); ctx.lineTo(cx, iy - r * 0.6); ctx.moveTo(cx, iy); ctx.lineTo(cx + r * 0.5, iy); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(cx, iy); ctx.lineTo(cx, iy - r * 0.6);
+      ctx.moveTo(cx, iy); ctx.lineTo(cx + r * 0.5, iy);
+      ctx.stroke();
     } else {
       ctx.beginPath(); ctx.arc(cx - r * 0.45, iy - r * 0.2, r * 0.42, 0, Math.PI * 2); ctx.fill();
       ctx.beginPath(); ctx.arc(cx + r * 0.45, iy - r * 0.2, r * 0.42, 0, Math.PI * 2); ctx.fill();
       ctx.beginPath(); ctx.roundRect(cx - r * 0.95, iy + r * 0.2, r * 1.9, r * 0.75, r * 0.3); ctx.fill();
     }
     ctx.fillStyle = '#ffffff';
-    ctx.fillText(s.label, cx, ch * 0.76);
+    ctx.textAlign = 'center';
+    ctx.font = `900 ${labelPx}px ${HEAVY}`;
+    ctx.fillText(s.label, cx, ch * 0.82);
+    ctx.textAlign = 'left';
   });
+
   const t = new CanvasTexture(c);
   t.colorSpace = SRGBColorSpace;
   t.anisotropy = 8;
@@ -822,32 +882,44 @@ function Lid({ lidRef, progress, texture, flapTex, feather, infoTex }) {
         <meshStandardMaterial map={texture} roughness={0.5} toneMapped={false} />
       </mesh>
 
-      {/* ---- CLEAR PLASTIC EYE-WINDOW COVERS: two glossy discs over the owl's eyes,
-          a hair above the art plane. Decorative only; children of the lid so they ride
-          with every existing animation. Slightly domed via a gently flattened sphere. ---- */}
+      {/* ---- CLEAR PLASTIC EYE-WINDOW DOMES: two blister bubbles over the owl's eyes,
+          curving outward like retro sunglasses. Built as an upper HEMISPHERE (thetaLength
+          = PI/2) so the silhouette genuinely bulges; EYE_LENS_RISE sets how proud it sits.
+          Fully clear — transmission 1 with a thin wall, so it catches glossy highlights
+          without tinting or darkening the dice sitting just underneath. Children of the
+          lid, so they ride with every existing animation. ---- */}
       {[-EYE_LENS_X, EYE_LENS_X].map((x, i) => (
-        <mesh key={`eyeLens${i}`} position={[x, EYE_LENS_Y, EYE_LENS_Z]} scale={[1, 0.16, 1]}>
-          <sphereGeometry args={[EYE_LENS_R, 48, 32]} />
+        <mesh
+          key={`eyeLens${i}`}
+          position={[x, EYE_LENS_Y, EYE_LENS_Z]}
+          scale={[1, EYE_LENS_RISE, 1]}
+        >
+          <sphereGeometry args={[EYE_LENS_R, 64, 40, 0, Math.PI * 2, 0, Math.PI / 2]} />
           <meshPhysicalMaterial
+            transmission={1}
+            thickness={0.04}
+            roughness={0.02}
+            metalness={0}
+            clearcoat={1}
+            clearcoatRoughness={0.02}
+            ior={1.5}
+            reflectivity={0.6}
+            side={2}
             transparent
-            opacity={0.35}
-            roughness={0.05}
-            metalness={0.1}
-            transmission={0.9}
-            clearcoat={1.0}
-            clearcoatRoughness={0.05}
-            ior={1.45}
+            opacity={1}
             toneMapped={false}
           />
         </mesh>
       ))}
 
-      {/* ---- RIM WALLS (thick sides forming the cavity) ---- */}
+      {/* ---- RIM WALLS + TELESCOPING SKIRT: one continuous sheet of black board from
+          the ceiling down past the cavity opening, sheathing the tray's outer walls when
+          closed. Spans CAV_CEIL → CAV_OPEN - SKIRT_H. ---- */}
       {[
-        { pos: [OW / 2 - LID_WALL / 2, 0, 0], args: [LID_WALL, LID_DEPTH, OH] },
-        { pos: [-OW / 2 + LID_WALL / 2, 0, 0], args: [LID_WALL, LID_DEPTH, OH] },
-        { pos: [0, 0, OH / 2 - LID_WALL / 2], args: [OW, LID_DEPTH, LID_WALL] },
-        { pos: [0, 0, -OH / 2 + LID_WALL / 2], args: [OW, LID_DEPTH, LID_WALL] },
+        { pos: [OW / 2 - LID_WALL / 2, -SKIRT_H / 2, 0], args: [LID_WALL, LID_DEPTH + SKIRT_H, OH] },
+        { pos: [-OW / 2 + LID_WALL / 2, -SKIRT_H / 2, 0], args: [LID_WALL, LID_DEPTH + SKIRT_H, OH] },
+        { pos: [0, -SKIRT_H / 2, OH / 2 - LID_WALL / 2], args: [OW, LID_DEPTH + SKIRT_H, LID_WALL] },
+        { pos: [0, -SKIRT_H / 2, -OH / 2 + LID_WALL / 2], args: [OW, LID_DEPTH + SKIRT_H, LID_WALL] },
       ].map((w, i) => (
         <mesh key={i} position={w.pos}>
           <boxGeometry args={w.args} />
@@ -855,9 +927,10 @@ function Lid({ lidRef, progress, texture, flapTex, feather, infoTex }) {
         </mesh>
       ))}
 
-      {/* info panel on the bottom short edge (+Z end, by the owl's shoes) */}
-      <mesh position={[0, CAV_CEIL + LID_TOP / 2, OH / 2 + 0.006]}>
-        <planeGeometry args={[OW * 0.92, OW * 0.92 / LID_INFO_ASPECT]} />
+      {/* info graphic on the FRONT black lip (+Z end, by the owl's shoes), centred on
+          the full visible face — skirt bottom to top plate — and scaled to fill it. */}
+      <mesh position={[0, LIP_C, OH / 2 + 0.006]}>
+        <planeGeometry args={[OW * 0.94, (OW * 0.94) / LID_INFO_ASPECT]} />
         <meshStandardMaterial map={infoTex} transparent roughness={0.6} toneMapped={false} />
       </mesh>
 
@@ -964,11 +1037,11 @@ function Scene({ progress }) {
   const feltW = INNER_W - WALL * 0.8;
   const feltH = INNER_H - WALL * 0.8;
   // DICE-ZONE labels on the four inner walls (flat-tray orientations).
-  const LW = 1.1, LH = 1.1 / WALL_LABEL_ASPECT, yc = WALL_H * 0.5, d = 0.006;
+  const LW = 0.9, LH = 0.9 / WALL_LABEL_ASPECT, yc = WALL_H * 0.5, d = 0.006;
+  // The +Z inner wall is now the WARNING wall, so it carries no DICE-ZONE label.
   const walls = [
     { key: 'px', position: [INNER_W / 2 - d, yc, 0], quaternion: WALL_QUAT_PX },
     { key: 'nx', position: [-INNER_W / 2 + d, yc, 0], quaternion: WALL_QUAT_NX },
-    { key: 'pz', position: [0, yc, INNER_H / 2 - d], quaternion: WALL_QUAT_PZ },
     { key: 'nz', position: [0, yc, -INNER_H / 2 + d], quaternion: WALL_QUAT_NZ },
   ];
 
@@ -1061,18 +1134,21 @@ function Scene({ progress }) {
             <meshStandardMaterial map={panels.wallLabel} transparent roughness={0.85} metalness={0} />
           </mesh>
         ))}
-        {/* OUTER-wall graphics: WARNING on the front (+Z, camera-facing) wall,
-            HAPPY DOUBLE on the two long side walls (±X). */}
-        <mesh position={[0, WALL_H / 2, INNER_H / 2 + WALL + 0.006]}>
-          <planeGeometry args={[W * 0.82, W * 0.82 / (1100 / 220)]} />
+        {/* WARNING! DOUBLE TROUBLE! lives on the INSIDE of the front (+Z) tray wall,
+            facing back into the box. The telescoping lid hides it completely when
+            closed — it is only revealed once the lid is lifted off. */}
+        <mesh position={[0, WALL_H * 0.52, INNER_H / 2 - 0.006]} quaternion={WALL_QUAT_PZ}>
+          <planeGeometry args={[1.5, 1.5 / (1100 / 220)]} />
           <meshStandardMaterial map={panels.warning} transparent roughness={0.8} metalness={0} />
         </mesh>
+        {/* HAPPY DOUBLE on the two long OUTER side walls (±X) — likewise sheathed by
+            the lid skirt until it comes off. */}
         <mesh position={[-INNER_W / 2 - WALL - 0.006, WALL_H / 2, 0]} rotation={[0, -Math.PI / 2, 0]}>
-          <planeGeometry args={[H * 0.7, H * 0.7 / (1536 / 320)]} />
+          <planeGeometry args={[H * 0.42, H * 0.42 / (1536 / 320)]} />
           <meshStandardMaterial map={panels.title} transparent roughness={0.8} metalness={0} />
         </mesh>
         <mesh position={[INNER_W / 2 + WALL + 0.006, WALL_H / 2, 0]} rotation={[0, Math.PI / 2, 0]}>
-          <planeGeometry args={[H * 0.7, H * 0.7 / (1536 / 320)]} />
+          <planeGeometry args={[H * 0.42, H * 0.42 / (1536 / 320)]} />
           <meshStandardMaterial map={panels.title} transparent roughness={0.8} metalness={0} />
         </mesh>
         {/* content rest anchors (flat: face up) */}
