@@ -16,7 +16,7 @@ import {
   DodecahedronGeometry,
   CanvasTexture,
 } from 'three';
-import { useScroll, useTransform, useMotionValueEvent, motion } from 'framer-motion';
+import { useScroll, useMotionValueEvent, motion, AnimatePresence } from 'framer-motion';
 import { theme } from '../content.js';
 
 /*
@@ -1171,14 +1171,34 @@ function Scene({ progress }) {
   );
 }
 
+/* Scroll-step captions under the box. Exactly one is on screen at a time: they
+ * all sit at the same spot, so anything that leaves two mounted stacks them into
+ * an unreadable pile. The boundaries fall in the gaps between the scene's beats
+ * — the lid is clear by ~0.37, the dice are loose by ~0.63 — so the copy swaps
+ * while the box is between moves. */
+const CAPTIONS = [
+  { eyebrow: 'The box opens', accent: GREEN, heading: 'Lid off. Contents out.' },
+  { eyebrow: 'Open eyes', accent: PINK, heading: 'Two D12, in the owl’s eyes.' },
+  { eyebrow: 'No risk. No run.', accent: GREEN, heading: 'Roll. Keep the higher. Push your luck.' },
+];
+const captionStep = (p) => (p < 0.37 ? 0 : p < 0.63 ? 1 : 2);
+
 export default function BoxOpen3D() {
   const sectionRef = useRef(null);
   const { scrollYProgress } = useScroll({ target: sectionRef, offset: ['start start', 'end end'] });
 
   const target = useRef(prefersReducedMotion ? 0.72 : 0);
   const smooth = useRef(prefersReducedMotion ? 0.72 : 0);
+  // Which caption is showing is discrete React state, not a scroll-linked opacity
+  // per caption: that older approach left all three mounted on the same spot, so
+  // any hiccup in the motion-value chain fell back to opacity 1 and stacked them.
+  const [step, setStep] = useState(() => captionStep(prefersReducedMotion ? 0.72 : 0));
+
   useMotionValueEvent(scrollYProgress, 'change', (v) => {
     if (!prefersReducedMotion) target.current = v;
+    // Captions still track scroll under reduced motion (where the scene is frozen)
+    // so all the copy stays reachable. React bails out when the step is unchanged.
+    setStep(captionStep(v));
   });
 
   const [active, setActive] = useState(true);
@@ -1190,9 +1210,7 @@ export default function BoxOpen3D() {
     return () => io.disconnect();
   }, []);
 
-  const capLid = useTransform(scrollYProgress, [0, 0.12, 0.34], [1, 1, 0]);
-  const capFlap = useTransform(scrollYProgress, [0.4, 0.52, 0.6], [0, 1, 0]);
-  const capRoll = useTransform(scrollYProgress, [0.66, 0.8, 1], [0, 1, 1]);
+  const caption = CAPTIONS[step];
 
   return (
     <section ref={sectionRef} className="relative" style={{ height: '400vh' }}>
@@ -1217,18 +1235,25 @@ export default function BoxOpen3D() {
           </Suspense>
         </Canvas>
 
-        <motion.div style={{ opacity: capLid }} className="pointer-events-none absolute bottom-16 left-0 right-0 text-center">
-          <p className="font-body text-xs uppercase tracking-[0.22em]" style={{ color: GREEN }}>The box opens</p>
-          <p className="font-display mt-2 text-2xl font-bold text-[color:var(--color-text-primary)]">Lid off. Contents out.</p>
-        </motion.div>
-        <motion.div style={{ opacity: capFlap }} className="pointer-events-none absolute bottom-16 left-0 right-0 text-center">
-          <p className="font-body text-xs uppercase tracking-[0.22em]" style={{ color: PINK }}>Open eyes</p>
-          <p className="font-display mt-2 text-2xl font-bold text-[color:var(--color-text-primary)]">Two D12, in the owl&apos;s eyes.</p>
-        </motion.div>
-        <motion.div style={{ opacity: capRoll }} className="pointer-events-none absolute bottom-16 left-0 right-0 text-center">
-          <p className="font-body text-xs uppercase tracking-[0.22em]" style={{ color: GREEN }}>No risk. No run.</p>
-          <p className="font-display mt-2 text-2xl font-bold text-[color:var(--color-text-primary)]">Roll. Keep the higher. Push your luck.</p>
-        </motion.div>
+        {/* Only the active step is mounted. `mode="wait"` holds the incoming caption
+            until the outgoing one has finished fading, so the two never share the
+            spot even mid-transition. */}
+        <div className="pointer-events-none absolute bottom-16 left-0 right-0 text-center">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={step}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.25, ease: 'easeOut' }}
+            >
+              <p className="font-body text-xs uppercase tracking-[0.22em]" style={{ color: caption.accent }}>
+                {caption.eyebrow}
+              </p>
+              <p className="font-display mt-2 text-2xl font-bold text-[color:var(--color-text-primary)]">{caption.heading}</p>
+            </motion.div>
+          </AnimatePresence>
+        </div>
       </div>
     </section>
   );
