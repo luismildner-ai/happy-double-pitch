@@ -1,19 +1,15 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { content, theme } from '../content.js';
 import OwlCharacter from './OwlCharacter.jsx';
+import { useDiceRoller } from '../lib/useDiceRoller.js';
 
 const PINK = theme.colors.neonPink;
 const GREEN = theme.colors.neonGreen;
-const roll12 = () => Math.floor(Math.random() * 12) + 1;
 
-/*
- * Interactive push-your-luck demo. Two D12 dice the visitor rolls; the higher
- * result is highlighted (the keep-the-higher rule). ~1 in 6 rolls comes up a
- * duplicate, which triggers the "owl strikes — round wiped" beat. Two mascot
- * owls flank the dice and react to each outcome (watch → cheer / shock).
- */
-function Die({ value, isHigher, wiped, rolling }) {
+/* A single D12 face. Shared with the playable board beneath the 3D box, which
+ * reuses `wiped` for its bust shake. */
+export function Die({ value, isHigher, wiped, rolling }) {
   return (
     <motion.div
       animate={
@@ -55,56 +51,52 @@ function Die({ value, isHigher, wiped, rolling }) {
   );
 }
 
-export default function DiceDemo() {
+/*
+ * Interactive push-your-luck demo. Two D12 dice the visitor rolls; the higher
+ * result is highlighted (the keep-the-higher rule). ~1 in 6 rolls comes up a
+ * duplicate, which triggers the "owl strikes — round wiped" beat. Two mascot
+ * owls flank the dice and react to each outcome (watch → cheer / shock).
+ *
+ * This is the teaser, not the rules: it reads a duplicate as a wiped round. The
+ * playable board (sections/PlayTheDemo.jsx) shares the same roller but applies
+ * the real rules, where a pair draws an Action Card instead.
+ */
+export default function DiceDemo({ onRollComplete }) {
   const { diceDemo } = content.howItPlays;
-  const reduce = useReducedMotion();
-  const [dice, setDice] = useState([7, 4]);
   const [phase, setPhase] = useState('idle'); // idle | rolling | kept | wiped
   // Owl reaction is its own state: react to the outcome, then return to idle
   // after a beat (a permanent cheer/shock pose reads as broken).
   const [owlMood, setOwlMood] = useState('idle');
-  const intervalRef = useRef(null);
   const moodTimerRef = useRef(null);
 
-  useEffect(
-    () => () => {
-      clearInterval(intervalRef.current);
+  useEffect(() => () => clearTimeout(moodTimerRef.current), []);
+
+  const handleComplete = useCallback(
+    (a, b) => {
+      const duplicate = a === b;
+      setPhase(duplicate ? 'wiped' : 'kept');
+      // One-shot owl reaction, then back to idle.
+      setOwlMood(duplicate ? 'shock' : 'cheer');
       clearTimeout(moodTimerRef.current);
+      moodTimerRef.current = setTimeout(() => setOwlMood('idle'), 2400);
+      onRollComplete?.(a, b);
     },
-    []
+    [onRollComplete]
   );
 
+  // Bias ~1 in 6 toward a duplicate so the owl-strike shows up naturally.
+  const { dice, rolling, roll: spin } = useDiceRoller({ duplicateBias: 0.17, onRollComplete: handleComplete });
+
   const roll = useCallback(() => {
-    if (phase === 'rolling') return;
+    if (rolling) return;
     setPhase('rolling');
     clearTimeout(moodTimerRef.current);
     setOwlMood('watching');
-
-    // Spin the visible numbers for a beat, then settle.
-    const spin = () => setDice([roll12(), roll12()]);
-    if (!reduce) {
-      intervalRef.current = setInterval(spin, 70);
-    }
-
-    const settle = () => {
-      clearInterval(intervalRef.current);
-      // Bias ~1 in 6 toward a duplicate so the owl-strike shows up naturally.
-      let a = roll12();
-      let b = roll12();
-      if (Math.random() < 0.17) b = a; // forced duplicate
-      setDice([a, b]);
-      setPhase(a === b ? 'wiped' : 'kept');
-      // One-shot owl reaction, then back to idle.
-      setOwlMood(a === b ? 'shock' : 'cheer');
-      moodTimerRef.current = setTimeout(() => setOwlMood('idle'), 2400);
-    };
-
-    setTimeout(settle, reduce ? 0 : 750);
-  }, [phase, reduce]);
+    spin();
+  }, [rolling, spin]);
 
   const [a, b] = dice;
   const higherIdx = phase === 'kept' ? (a >= b ? 0 : 1) : -1;
-  const rolling = phase === 'rolling';
   const wiped = phase === 'wiped';
 
   return (

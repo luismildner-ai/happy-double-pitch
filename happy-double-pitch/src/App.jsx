@@ -7,6 +7,7 @@ import WhyItSells from './sections/WhyItSells.jsx';
 import BuiltToTravel from './sections/BuiltToTravel.jsx';
 import BackedByDenkRiesen from './sections/BackedByDenkRiesen.jsx';
 import LetsPartner from './sections/LetsPartner.jsx';
+import PlayTheDemo from './sections/PlayTheDemo.jsx';
 import Footer from './components/Footer.jsx';
 
 // The 3D box-open pulls in three.js (~350KB gzip). Lazy-load it so the hero
@@ -24,6 +25,7 @@ export default function App() {
         <Suspense fallback={<div style={{ minHeight: '100vh' }} />}>
           <BoxOpen3D />
         </Suspense>
+        <PlayTheDemo />
         <WhyPlayersLoveIt />
         <HowItPlays />
         <WhyItSells />
