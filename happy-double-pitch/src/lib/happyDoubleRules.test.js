@@ -50,10 +50,6 @@ test('action card effects', () => {
   assert.equal(applyCard({ ...initialState(), turnScore: 10 }, 'bonus').turnScore, 15);
   assert.equal(applyCard({ ...initialState(), turnScore: 10 }, 'double').turnScore, 20);
   assert.equal(applyCard(initialState(), 'shield').shield, true);
-
-  const rerolled = applyCard({ ...initialState(), turnScore: 10, turnMarks: [1, 2] }, 'reroll');
-  assert.deepEqual(rerolled.turnMarks, [], 'numbers clear');
-  assert.equal(rerolled.turnScore, 10, 'score survives');
 });
 
 test('card effects are not idempotent — the UI must apply each draw once', () => {

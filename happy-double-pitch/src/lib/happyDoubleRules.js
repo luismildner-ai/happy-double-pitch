@@ -34,14 +34,6 @@ export const ACTION_CARDS = [
     effect: 'Doubles your temporary score — but it is still unbanked.',
     resolved: 'Turn score doubled. Bank it or push it.',
   },
-  {
-    id: 'reroll',
-    tag: 'Disrupt',
-    title: 'Clean Re-roll',
-    color: 'pink',
-    effect: 'Clears the numbers you have rolled this turn. Your score stays.',
-    resolved: 'Top line cleared for this turn. Every number is open again.',
-  },
 ];
 
 export const initialState = () => ({
@@ -95,9 +87,6 @@ export function applyCard(state, cardId) {
       return { ...state, turnScore: state.turnScore + 5 };
     case 'double':
       return { ...state, turnScore: state.turnScore * 2 };
-    case 'reroll':
-      // The numbers clear; the score earned so far survives.
-      return { ...state, turnMarks: [] };
     default:
       return state;
   }
