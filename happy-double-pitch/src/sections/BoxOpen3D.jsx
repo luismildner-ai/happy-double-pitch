@@ -784,8 +784,13 @@ function FlyOutItem({ anchorRef, park, out, progress, size, textureUrl, sideColo
   const P = useMemo(() => new Vector3(), []);
   const B = useMemo(() => new Vector3(...park.pos), [park]);
   const parkQ = useMemo(() => new Quaternion().setFromEuler(new Euler(...park.rot)), [park]);
+  const { gl } = useThree();
   const map = useLoader(TextureLoader, textureUrl);
   map.colorSpace = SRGBColorSpace;
+  // Card/scorepad text is read close-up and near edge-on when the deck first
+  // lifts off the felt — without anisotropic filtering, mipmapping alone
+  // blurs it into mush at that angle. Same fix as the lid cover art.
+  map.anisotropy = gl.capabilities.getMaxAnisotropy();
   if (texQuarterTurn) {
     map.center.set(0.5, 0.5);
     map.rotation = Math.PI / 2;
