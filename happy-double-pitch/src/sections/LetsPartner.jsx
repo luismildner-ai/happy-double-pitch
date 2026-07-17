@@ -43,7 +43,6 @@ export default function LetsPartner() {
         <h2 className="font-display mx-auto mt-3 max-w-2xl text-4xl font-extrabold tracking-tight text-[color:var(--color-text-primary)] sm:text-5xl">
           {s.title}
         </h2>
-        <p className="mx-auto mt-4 max-w-xl font-body text-base leading-relaxed text-[color:var(--color-text-muted)]">{s.body}</p>
       </Reveal>
 
       <Reveal delay={0.1} className="relative mt-12">

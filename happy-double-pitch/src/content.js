@@ -277,7 +277,6 @@ export const content = {
   letsPartner: {
     eyebrow: "Let's Partner",
     title: 'Bring Happy Double to your market.',
-    body: 'Next step: a short playtest — 30–45 minutes, 2–4 people — plus a look at partnership options for your territory.',
     contactEmail: 'schulz@denkriesen.com',
     form: {
       nameLabel: 'Name',
