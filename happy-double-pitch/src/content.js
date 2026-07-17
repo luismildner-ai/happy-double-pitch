@@ -229,7 +229,7 @@ export const content = {
   builtToTravel: {
     eyebrow: 'Built to Travel',
     title: 'Localizes fast. Adapts to any market.',
-    body: 'Happy Double is light on text and heavy on icons — the rules, cards, and scorepad translate quickly and affordably into a new language and market. Toggle below to see a sample.',
+    body: 'Happy Double is light on text and heavy on icons — the rules, cards, and scorepad translate quickly and affordably into a new language and market.',
     languages: [
       {
         code: 'EN',

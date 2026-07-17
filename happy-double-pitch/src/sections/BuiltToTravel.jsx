@@ -74,10 +74,6 @@ export default function BuiltToTravel() {
               </motion.div>
             </AnimatePresence>
           </div>
-          <p className="mt-4 text-center font-body text-xs text-[color:var(--color-text-muted)]">
-            {/* DUMMY COPY — replace with reviewed translations before launch. */}
-            Sample translations shown for demonstration.
-          </p>
         </div>
       </Reveal>
     </section>
