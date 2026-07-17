@@ -20,7 +20,11 @@ export const theme = {
   },
   fonts: {
     // Loaded via Google Fonts <link> in index.html.
-    display: "'Sora', system-ui, sans-serif",
+    // Montserrat (not Sora): Sora's uppercase "Y" is asymmetric by design at
+    // heavy weights — its right diagonal is a full straight stroke while the
+    // left is cut short, which reads as a broken/warped glyph in a wordmark.
+    // Montserrat's Y is a clean, symmetric geometric form at the same weight.
+    display: "'Montserrat', system-ui, sans-serif",
     body: "'Inter', system-ui, sans-serif",
   },
 };
