@@ -1,5 +1,5 @@
 import { useRef, useMemo, useState, useEffect, Suspense } from 'react';
-import { Canvas, useFrame, useLoader } from '@react-three/fiber';
+import { Canvas, useFrame, useLoader, useThree } from '@react-three/fiber';
 import { Physics, RigidBody, CuboidCollider } from '@react-three/rapier';
 import {
   TextureLoader,
@@ -544,7 +544,7 @@ function makeLidInfoDecal() {
     { icon: 'feather', color: GREEN },
     { icon: 'age', label: '8–99' },
     { icon: 'time', label: '20 Min.' },
-    { icon: 'players', label: 'ab 2' },
+    { icon: 'players', label: '2+' },
     { icon: 'feather', color: INSERT_PINK },
   ];
   const iy = ch * 0.4; // icon centre
@@ -568,8 +568,23 @@ function makeLidInfoDecal() {
     ctx.fillStyle = '#ffffff';
     ctx.lineWidth = ch * 0.028;
     if (s.icon === 'age') {
-      ctx.beginPath(); ctx.arc(cx, iy, r, 0, Math.PI * 2); ctx.stroke();
-      ctx.beginPath(); ctx.arc(cx, iy, r * 0.28, 0, Math.PI * 2); ctx.fill();
+      // Standard board-game "age" pictogram: a child and an adult figure
+      // standing on a shared baseline, not a plain circle-and-dot.
+      const baseline = iy + r * 0.62;
+      const adultHeadR = r * 0.24;
+      const adultX = cx + r * 0.3;
+      const adultHeadY = iy - r * 0.42;
+      ctx.beginPath(); ctx.arc(adultX, adultHeadY, adultHeadR, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath();
+      ctx.roundRect(adultX - r * 0.26, adultHeadY + adultHeadR * 0.85, r * 0.52, baseline - (adultHeadY + adultHeadR * 0.85), r * 0.16);
+      ctx.fill();
+      const childHeadR = r * 0.17;
+      const childX = cx - r * 0.32;
+      const childHeadY = iy - r * 0.06;
+      ctx.beginPath(); ctx.arc(childX, childHeadY, childHeadR, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath();
+      ctx.roundRect(childX - r * 0.19, childHeadY + childHeadR * 0.85, r * 0.38, baseline - (childHeadY + childHeadR * 0.85), r * 0.12);
+      ctx.fill();
     } else if (s.icon === 'time') {
       ctx.beginPath(); ctx.arc(cx, iy, r, 0, Math.PI * 2); ctx.stroke();
       ctx.beginPath();
@@ -1028,8 +1043,14 @@ function Lid({ lidRef, progress, texture, flapTex, feather, infoTex }) {
 /* --------------------------------------------------------------- scene --- */
 
 function Scene({ progress }) {
+  const { gl } = useThree();
   const texture = useLoader(TextureLoader, FRONT_TEXTURE);
   texture.colorSpace = SRGBColorSpace;
+  // Full-bleed cover art is viewed at a shallow, near-grazing angle on the lid
+  // top — without anisotropic filtering, mipmapping alone blurs it heavily at
+  // that angle. Every other (canvas-drawn) texture in this file already sets
+  // anisotropy; this real photo texture was missing it.
+  texture.anisotropy = gl.capabilities.getMaxAnisotropy();
   const flapTex = useMemo(makeFlapTexture, []);
   const panels = useMemo(
     () => ({
