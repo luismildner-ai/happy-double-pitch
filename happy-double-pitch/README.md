@@ -1,6 +1,6 @@
 # Happy Double — Publisher Pitch Site
 
-A single-page licensing pitch for the DenkRiesen board game **HAPPY DOUBLE**,
+A single-page licensing pitch for the DENKRIESEN board game **HAPPY DOUBLE**,
 aimed at international publishers. Built with React + Vite + Tailwind CSS +
 Framer Motion, with a scroll-driven 3D box-open scene (three.js /
 react-three-fiber).
@@ -75,7 +75,7 @@ real file is in place.
 
 The two mascot owls in the "How it plays" dice demo are drawn as an inline SVG
 ([`src/components/OwlCharacter.jsx`](src/components/OwlCharacter.jsx)) so the
-reactive scene works out of the box. Replace it with DenkRiesen's real mascot
+reactive scene works out of the box. Replace it with DENKRIESEN's real mascot
 cutout when available — the `mood` wiring stays the same.
 
 ---

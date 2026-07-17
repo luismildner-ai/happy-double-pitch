@@ -42,9 +42,9 @@ const image = (src, label, width, height, alt, isPlaceholder = true) => ({
 
 export const content = {
   meta: {
-    title: 'Happy Double — Publisher Pitch | DenkRiesen',
+    title: 'Happy Double — Publisher Pitch | DENKRIESEN',
     description:
-      'HAPPY DOUBLE: a fast, addictive push-your-luck dice game from DenkRiesen. Licensing pitch for international publishers.',
+      'HAPPY DOUBLE: a fast, addictive push-your-luck dice game from DENKRIESEN. Licensing pitch for international publishers.',
   },
 
   nav: {
@@ -262,13 +262,13 @@ export const content = {
   },
 
   backedByDenkRiesen: {
-    eyebrow: 'Backed by DenkRiesen',
+    eyebrow: 'Backed by DENKRIESEN',
     title: 'Wir machen die Spiele.',
     subtitle: '— "We make the games."',
-    body: 'DenkRiesen is a German board game publisher with a catalog built on sharp, accessible design and games people actually keep playing. Happy Double is designed by Christopher Manuel and developed in-house from concept to shelf-ready product.',
+    body: 'DENKRIESEN is a German board game publisher with a catalog built on sharp, accessible design and games people actually keep playing. Happy Double is designed by Christopher Manuel and developed in-house from concept to shelf-ready product.',
     facts: [
       { label: 'Designer', value: 'Christopher Manuel' },
-      { label: 'Publisher', value: 'DenkRiesen' },
+      { label: 'Publisher', value: 'DENKRIESEN' },
       { label: 'Origin market', value: 'Germany' },
       { label: 'Status', value: 'Available for international licensing' },
     ],
@@ -289,7 +289,7 @@ export const content = {
   },
 
   footer: {
-    copy: `© ${new Date().getFullYear()} DenkRiesen. Happy Double is a trademark of DenkRiesen.`,
+    copy: `© ${new Date().getFullYear()} DENKRIESEN. Happy Double is a trademark of DENKRIESEN.`,
   },
 };
 
