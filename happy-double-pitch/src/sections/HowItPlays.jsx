@@ -1,6 +1,5 @@
 import { content } from '../content.js';
 import Reveal from '../components/Reveal.jsx';
-import DiceDemo from '../components/DiceDemo.jsx';
 import ActionCards from '../components/ActionCards.jsx';
 import PillPhoto from '../components/PillPhoto.jsx';
 
@@ -44,11 +43,6 @@ export default function HowItPlays() {
             </Reveal>
           ))}
         </div>
-      </Reveal>
-
-      {/* Interactive dice demo + reactive owls */}
-      <Reveal className="mt-14">
-        <DiceDemo />
       </Reveal>
 
       {/* Flippable action cards */}

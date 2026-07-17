@@ -128,13 +128,9 @@ export const content = {
       },
     ],
     diceDemo: {
-      title: 'Try the push-your-luck moment',
-      body: 'Roll both dice. The higher number counts — but roll a duplicate and the owl wipes your round.',
-      rollLabel: 'Roll the dice',
-      rollingLabel: 'Rolling…',
+      // Only field still in use: the "Keep" badge on Die (components/DiceDemo.jsx),
+      // shared by the playable board under the 3D box.
       keepLabel: 'Keep',
-      wipeoutTitle: 'THE OWL STRIKES!',
-      wipeoutBody: 'Duplicate rolled — round wiped.',
     },
     actionCards: {
       title: 'Flip an Action Card',
