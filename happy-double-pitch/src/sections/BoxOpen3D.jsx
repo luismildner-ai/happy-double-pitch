@@ -53,6 +53,12 @@ const PINK = theme.colors.neonPink;
 const GREEN = theme.colors.neonGreen;
 const INSERT_PINK = '#d81b7f';
 const FELT_GREEN = '#8ec21a';
+// Heavy compact grotesk stack; Arial Black / Impact are the condensed, weighty
+// faces closest to the box's lettering and are present on essentially every host.
+// Using the real Black face (not a synthesized weight:900 on regular Arial)
+// matters here — faux-bold synthesis skews diagonal strokes (the "Y" arms come
+// out visibly unbalanced) once a stroke outline is layered on top.
+const HEAVY = '"Arial Black", "Helvetica Neue", Impact, Arial, sans-serif';
 
 const prefersReducedMotion =
   typeof window !== 'undefined' &&
@@ -478,12 +484,12 @@ function makeTitleDecal() {
   c.height = ch;
   const ctx = c.getContext('2d');
   ctx.clearRect(0, 0, cw, ch);
-  ctx.font = `900 ${Math.floor(ch * 0.62)}px Arial, sans-serif`;
+  ctx.font = `900 ${Math.floor(ch * 0.62)}px ${HEAVY}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.letterSpacing = '4px';
   ctx.lineJoin = 'round';
-  ctx.lineWidth = ch * 0.06;
+  ctx.lineWidth = ch * 0.04;
   ctx.strokeStyle = 'rgba(10,0,6,0.55)';
   ctx.strokeText('HAPPY DOUBLE', cw / 2, ch / 2);
   ctx.fillStyle = '#ffffff';
@@ -499,9 +505,6 @@ function makeTitleDecal() {
 // —  green feather · 8–99 · 20 Min. · ab 2 · pink feather — all vertically centred
 // and scaled to fill the face generously.
 const LID_INFO_ASPECT = 1900 / 440;
-// Heavy compact grotesk stack; Arial Black / Impact are the condensed, weighty
-// faces closest to the box's lettering and are present on essentially every host.
-const HEAVY = '"Arial Black", "Helvetica Neue", Impact, Arial, sans-serif';
 function makeLidInfoDecal() {
   const cw = 1900, ch = 440;
   const c = document.createElement('canvas');
