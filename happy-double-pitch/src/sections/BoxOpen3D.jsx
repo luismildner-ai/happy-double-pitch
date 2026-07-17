@@ -398,16 +398,20 @@ function makeFlapTexture() {
   for (let i = 0; i < 60; i++) {
     drawFeather(ctx, Math.random() * cw, Math.random() * ch, 18 + Math.random() * 28, Math.random() * Math.PI, 'rgba(15,0,10,0.24)');
   }
-  // bold white "AUGEN AUF!"
+  // bold white "EYES OPEN!"
   ctx.fillStyle = '#ffffff';
-  ctx.font = '900 150px Arial, sans-serif';
+  // HEAVY (real Arial Black), not a synthesized weight:900 on plain Arial —
+  // synthesis skews diagonal strokes once a stroke outline is layered on top
+  // (see the "HAPPY DOUBLE" title decal fix); "EYES" has a Y that would
+  // otherwise render with the same lopsided-arm distortion.
+  ctx.font = `900 150px ${HEAVY}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.lineJoin = 'round';
   ctx.lineWidth = 14;
   ctx.strokeStyle = 'rgba(10,0,6,0.5)';
-  ctx.strokeText('AUGEN AUF!', cw / 2, ch * 0.5);
-  ctx.fillText('AUGEN AUF!', cw / 2, ch * 0.5);
+  ctx.strokeText('EYES OPEN!', cw / 2, ch * 0.5);
+  ctx.fillText('EYES OPEN!', cw / 2, ch * 0.5);
   const t = new CanvasTexture(c);
   t.colorSpace = SRGBColorSpace;
   t.anisotropy = 4;
