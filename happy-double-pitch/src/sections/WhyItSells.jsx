@@ -53,8 +53,8 @@ export default function WhyItSells() {
             </Reveal>
           ))}
         </div>
-        <Reveal delay={0.1}>
-          <ProductImage image={s.boxBackImage} className="w-full" />
+        <Reveal delay={0.1} className="flex justify-center lg:justify-end">
+          <ProductImage image={s.boxBackImage} className="w-full max-w-sm lg:max-w-md" rounded="rounded-xl" />
         </Reveal>
       </div>
     </section>

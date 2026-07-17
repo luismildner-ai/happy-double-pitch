@@ -217,11 +217,11 @@ export const content = {
       { value: 222, suffix: '', label: 'Target score to win' },
     ],
     boxBackImage: image(
-      '/images/box-front-back.png',
-      'Box front + back',
-      1600,
-      1000,
-      'Happy Double box front and back panels',
+      '/images/retail-display.png',
+      'Retail shelf display',
+      1086,
+      1448,
+      'Happy Double retail floor display, stocked with boxes, in a store aisle',
       false // real asset from deck
     ),
   },
