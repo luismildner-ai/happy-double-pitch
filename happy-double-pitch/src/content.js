@@ -277,13 +277,19 @@ export const content = {
   letsPartner: {
     eyebrow: "Let's Partner",
     title: 'Bring Happy Double to your market.',
-    contactEmail: 'schulz@denkriesen.com',
+    contactEmail: 'schulz@denkRIESEN.com',
     form: {
       nameLabel: 'Name',
       emailLabel: 'Email',
       messageLabel: 'Message',
       messagePlaceholder: 'Tell us about your market and what you’d like to see next.',
       submitLabel: 'Request a sample / playtest',
+      sendingLabel: 'Sending…',
+      // `{name}` is replaced with the submitted name.
+      successTitle: 'Thank you, {name}!',
+      successBody: 'Your message has been sent directly to the DENKRIESEN team. We will get back to you shortly.',
+      errorMessage: 'Something went wrong sending your message.',
+      retryLabel: 'Try again',
     },
   },
 
